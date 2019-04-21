@@ -2,10 +2,14 @@
 using NetEngineCore.Messaging;
 using NetEngineCore.Networking;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Runtime.Caching;
 using System.Threading;
 using System.Threading.Tasks;
+using NetEngineServer.Filtering;
 using NetEngineServer.Messaging.Dispatching;
 using NetEngineServer.Utils;
 
@@ -14,11 +18,28 @@ namespace NetEngineServer {
     /// GameServer class.
     /// </summary>
     public class Server {
+     
+        #region Private members
+        
+        // Networking server
         internal NetEngineCore.Networking.Server NetworkingServer;
+        
+        // States
         private bool _shouldRun = false;
-        private Dictionary<int, Client> _clients = new Dictionary<int, Client>();
-        private readonly ServerMessageDispatcher _dispatcher;
         private volatile bool _running = false;
+        
+        // Dispatcher
+        private readonly ServerMessageDispatcher _dispatcher;
+        private readonly ICollection<IFilter> _middlewares;
+        
+        // Clients
+        private ClientPool _clients = new ClientPool(); // Client pool
+        private SafeCacheDictionary<Client> _authWaitList = new SafeCacheDictionary<Client>(); // Not authenticated client pool
+        
+        #endregion
+        
+        
+        #region Properties
         
         /// <summary>
         /// Get whether the server is running.
@@ -30,6 +51,11 @@ namespace NetEngineServer {
         /// </summary>
         public bool AuthenticationMandatory { get; set; } = true;
 
+        /// <summary>
+        /// Get or set the default auth TTL (default: 1000).
+        /// </summary>
+        public int DefaultAuthTtl { get; set; } = 1000 * 10; // 10 secs
+        
         /// <summary>
         /// Get the server port.
         /// </summary>
@@ -71,19 +97,70 @@ namespace NetEngineServer {
         public int CurrentFrequency { get; private set; }
 
         /// <summary>
-        /// TODO
+        /// Tell the server to use SSL. todo
         /// </summary>
         public bool UseSsl { get; set; }
         
-        public HashSet<string> IpWhiteList { get; } = new HashSet<string>();
-
-        public ServerMessageDispatcher Dispatcher => _dispatcher;
-
-        public event EventHandler OnServerReady = delegate { };
-        public event EventHandler OnServerStopped = delegate { };
-        public event EventHandler OnClientConnected = delegate { };
-        public event EventHandler OnClientDisconnected = delegate { };
+        /// <summary>
+        /// Get or set the certificate path. todo
+        /// </summary>
+        public string Certificate { get; set; }
         
+        /// <summary>
+        /// Get or set whether the server uses whitelist to handle connections. todo
+        /// </summary>
+        public bool UseWhiteList { get; set; }
+        
+        /// <summary>
+        /// Get or set whether the server uses whitelist to handle connections. todo
+        /// </summary>
+        public bool UseBlackList { get; set; }
+        
+        /// <summary>
+        /// Get a set of whitelisted ips. todo
+        /// </summary>
+        public HashSet<IPAddress> IpWhiteList { get; } = new HashSet<IPAddress>();
+
+        /// <summary>
+        /// Get a set of blacklisted ips. todo
+        /// </summary>
+        public HashSet<IPAddress> IpBlackList { get; } = new HashSet<IPAddress>();
+        
+        /// <summary>
+        /// Get the dispatcher.
+        /// </summary>
+        public ServerMessageDispatcher Dispatcher => _dispatcher;
+        
+        /// <summary>
+        /// Get or set the maximum amount of clients. todo
+        /// </summary>
+        public int MaxClients { get; set; }
+        
+        /// <summary>
+        /// Get or set the maximum amount of waiting clients (for authentication). todo
+        /// </summary>
+        public int MaxWaitingClients { get; set; }
+
+        public bool UseMiddlewares { get; set; } = true;
+        
+        #endregion
+
+
+        #region Events
+        public delegate void ClientEventHandler(object sender, ClientEventArgs e);
+        public event EventHandler Ready = delegate { };
+        public event EventHandler Starting = delegate { };
+        public event EventHandler Stopped = delegate { };
+        public event EventHandler Stopping = delegate { };
+        public event ClientEventHandler ClientConnected = delegate { };
+        public event ClientEventHandler ClientDisconnected = delegate { };
+        public event ClientEventHandler ClientAuthenticated = delegate { };
+
+        #endregion
+
+        
+        #region Constructors
+
         /// <summary>
         /// Constructor.
         /// </summary>
@@ -91,9 +168,15 @@ namespace NetEngineServer {
         public Server(int port) {
             Port = port;
             _dispatcher = new ServerMessageDispatcher(this);
+            _middlewares = new List<IFilter>();
         }
 
-        /// <summary>
+        #endregion
+        
+        
+        #region Public methods
+
+         /// <summary>
         /// Run the server.
         /// </summary>
         public void Run() {
@@ -102,8 +185,10 @@ namespace NetEngineServer {
                 throw new Exception("Server already running");
             }
 
+            // Fire event "on server starting..."
+            Starting(this, new EventArgs());
+            
             // Start the networking server
-            LogInfo($"Starting the server on port {Port}...");
             NetworkingServer = new NetEngineCore.Networking.Server();
             NetworkingServer.Start(Port);
 
@@ -111,27 +196,26 @@ namespace NetEngineServer {
             _shouldRun = true;
             _running = NetworkingServer.Active;
 
-            OnServerReady(this, new EventArgs());
-            LogInfo($"Server listening for messages.");
-            // Warning : this server instance is blocking!
-            
+            // Fire event "on server ready..."
+            Ready(this, new EventArgs());
+
             var task = new Task(() => {
                 while (_shouldRun) {
                     // Cycle (create a watch to calculate elapsed time)
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-
+                    
                     // Consume all pending messages
                     while (NetworkingServer.GetNextMessage(out Packet packet)) {
                         // Treat message
                         switch (packet.PacketType) {
                             case PacketType.Connection:
-                                ProcessPacketConnection(packet);
+                                OnConnection(packet);
                                 break;
                             case PacketType.Data:
-                                ProcessPacketData(packet);
+                                OnData(packet);
                                 break;
                             case PacketType.Disconnection:
-                                ProcessPacketDisconnection(packet);
+                                OnDisconnection(packet);
                                 break;
                             default:
                                 throw new ArgumentOutOfRangeException();
@@ -151,127 +235,233 @@ namespace NetEngineServer {
             task.Start();
         }
 
-        /// <summary>
-        /// Get one connection.
-        /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public Client GetClient(int id) {
-            return _clients[id];
-        }
+         /// <summary>
+         /// Get one client.
+         /// </summary>
+         /// <param name="id"></param>
+         /// <returns></returns>
+         public Client GetClient(int id) {
+             return _clients[id];
+         }
 
-        /// <summary>
-        /// Get all the connections.
-        /// </summary>
-        /// <returns></returns>
-        public IEnumerable<Client> GetClients() {
-            return _clients.Values.ToArray();
-        }
+         /// <summary>
+         /// Get one client from the waiting list
+         /// </summary>
+         /// <param name="id"></param>
+         /// <returns></returns>
+         public Client GetWaitingListClient(int id) {
+             return _authWaitList[id.ToString()];
+         }
 
-        public void Broadcast(Message message) {
-            // Todo: to refactor with client class directly
-            foreach (var client in _clients) {
-                client.Value.Send(message);
-            }
-        }
+         /// <summary>
+         /// Authenticate a client.
+         /// </summary>
+         /// <param name="client"></param>
+         /// <param name="identifier"></param>
+         public void AuthenticateClient(Client client, string identifier) {
+             AuthenticateClient(client.Id, identifier);
+         }
 
-        /// <summary>
-        /// Force disconnect a client. This is a disconnection from server, i.e. client will lose connection.
-        /// </summary>
-        /// <param name="id"></param>
-        public void ForceDisconnectClient(int id) {
-            if (!_clients.ContainsKey(id) && !NetworkingServer.IsClientConnected(id)) {
-                throw new Exception($"User with id {id} is not connected.");
-            }
+         /// <summary>
+         /// Authenticate a client.
+         /// </summary>
+         /// <param name="id"></param>
+         /// <param name="identifier"></param>
+         public void AuthenticateClient(int id, string identifier) {
+             var client = _authWaitList[id.ToString()];
+             _authWaitList.Remove(id.ToString());
+             client.Identifier = identifier;
+             client.Authenticated = true;
+             _clients.Add(client);
+                     
+             // Fire event "on client authenticated..."
+             ClientAuthenticated(this, new ClientEventArgs(client));
+         }
+         
+         /// <summary>
+         /// Get all the clients.
+         /// </summary>
+         /// <returns></returns>
+         public IEnumerable<Client> GetClients() {
+             return _clients.ToList();
+         }
 
-            _clients.Remove(id);
-            NetworkingServer.Disconnect(id);
-            LogInfo($"Player with id {id} kicked.");
-        }
+         /// <summary>
+         /// Get all the clients from the waiting list.
+         /// </summary>
+         /// <returns></returns>
+         public IEnumerable<Client> GetWaitingListClients() {
+             return _authWaitList.Values;
+         }
+         
+         /// <summary>
+         /// Broadcast a message to all clients.
+         /// </summary>
+         /// <param name="message"></param>
+         public void Broadcast(Message message) {
+             foreach (Client client in _clients) {
+                 client.Send(message);
+             }
+         }
+         
+         /// <summary>
+         /// Broadcast a message to clients.
+         /// </summary>
+         /// <param name="targets"></param>
+         /// <param name="message"></param>
+         public void Broadcast(IEnumerable<Client> targets, Message message) {
+             foreach (var client in targets) {
+                 client.Send(message);
+             }
+         }
+         
+         /// <summary>
+         /// Force disconnect a client. This is a disconnection from server, i.e. client will lose connection.
+         /// </summary>
+         /// <param name="id"></param>
+         public void ForceDisconnectClient(int id) {
+             if (!_clients.Contains(id) && !NetworkingServer.IsClientConnected(id)) {
+                 throw new Exception($"User with id {id} is not connected.");
+             }
 
-        /// <summary>
-        /// Force disconnect all clients. This is a disconnection from server, i.e. clients will lose connection.
-        /// </summary>
-        public void ForceDisconnectAll() {
-            LogInfo($"Disconnecting every player...");
-            if (_clients.Keys.Count == 0) {
-                LogInfo($"There is no player to disconnect.");
-                return;
-            }
+             _clients.Remove(id);
+             NetworkingServer.Disconnect(id);
+             LogInfo($"Player with id {id} kicked.");
+         }
 
-            foreach (var key in _clients.Keys) {
-                ForceDisconnectClient(key);
-            }
+         /// <summary>
+         /// Force disconnect all clients. This is a disconnection from server, i.e. clients will lose connection.
+         /// </summary>
+         public void ForceDisconnectAll() {
+             LogInfo($"Disconnecting every player...");
+             if (_clients.Count == 0) {
+                 LogInfo($"There is no player to disconnect.");
+                 return;
+             }
 
-            LogInfo($"All players were disconnected.");
-        }
+             foreach (var key in _clients.Ids) {
+                 ForceDisconnectClient(key);
+             }
 
-        /// <summary>
-        /// Disconnect a client.
-        /// </summary>
-        /// <param name="id"></param>
-        /// <exception cref="NotImplementedException"></exception>
-        public void DisconnectClient(int id) {
-            //todo: implement
-            throw new NotImplementedException();
-        }
+             LogInfo($"All players were disconnected.");
+         }
 
-        /// <summary>
-        /// Disconnect all clients.
-        /// </summary>
-        /// <exception cref="NotImplementedException"></exception>
-        public void DisconnectAll() {
-            //todo: implement
-            throw new NotImplementedException();
-        }
+         /// <summary>
+         /// Disconnect a client.
+         /// </summary>
+         /// <param name="id"></param>
+         /// <exception cref="NotImplementedException"></exception>
+         public void DisconnectClient(int id) {
+             //todo: implement
+             throw new NotImplementedException();
+         }
+
+         /// <summary>
+         /// Disconnect all clients.
+         /// </summary>
+         /// <exception cref="NotImplementedException"></exception>
+         public void DisconnectAll() {
+             //todo: implement
+             throw new NotImplementedException();
+         }
+         
+         /// <summary>
+         /// Stop the server.
+         /// </summary>
+         public void Stop() {
+             if (!Running) {
+                 throw new Exception("Server not running");
+             }
+
+             // Fire event "on server stopping..."
+             Stopping(this, new EventArgs());
+             
+             _shouldRun = false;
+             NetworkingServer.Stop();
+             _running = false;
+             
+             // Fire event "on server stopped..."
+             Stopped(this, new EventArgs());
+             LogInfo("Server stopped.");
+         }
+
+         /// <summary>
+         /// Attach a middleware.
+         /// </summary>
+         /// <param name="middleware"></param>
+         public void AttachFilter(IFilter middleware) {
+             _middlewares.Add(middleware);
+         }
+
+         /// <summary>
+         /// Detach a middleware.
+         /// </summary>
+         /// <param name="middleware"></param>
+         public void DetachFilter(IFilter middleware) {
+             _middlewares.Remove(middleware);
+         }
+
+         public bool IsAuthenticated(Client client) {
+             return IsAuthenticated(client.Id);
+         }
+
+         public bool IsAuthenticated(int id) {
+             return _authWaitList.ContainsKey(id.ToString());
+         }
+         
+        #endregion
+
+
+        #region Private methods
 
         /// <summary>
         /// Process a connection packet.
         /// </summary>
         /// <param name="packet"></param>
-        private void ProcessPacketConnection(Packet packet) {
-            var connection = new Client(packet.ConnectionId,
+        private void OnConnection(Packet packet) {
+            var client = new Client(packet.ConnectionId,
                 NetworkingServer.GetClientAddress(packet.ConnectionId), this);
-            LogInfo($"Client {connection.ToString()} connected (not yet authenticated).");
-            _clients.Add(packet.ConnectionId, connection);
-            OnClientConnected(this, new EventArgs()); // todo: ClientEventArgs
+
+            // Add the client to the auth waiting list
+            _authWaitList.Add(packet.ConnectionId.ToString(), client, TimeSpan.FromMilliseconds(DefaultAuthTtl));
+            
+            ClientConnected(this, new ClientEventArgs(client));
         }
 
         /// <summary>
         /// Process a disconnection packet.
         /// </summary>
         /// <param name="packet"></param>
-        private void ProcessPacketDisconnection(Packet packet) {
-            var connection = _clients[packet.ConnectionId];
-            LogInfo($"Client {connection.ToString()} disconnected.");
+        private void OnDisconnection(Packet packet) {
+            var client = _clients[packet.ConnectionId];
+            LogInfo($"Client {client.ToString()} disconnected.");
             _clients.Remove(packet.ConnectionId);
-            OnClientDisconnected(this, new EventArgs()); // todo: ClientEventArgs
+            ClientDisconnected(this, new ClientEventArgs(client));
         }
 
         /// <summary>
         /// Process a data packet.
         /// </summary>
         /// <param name="packet"></param>
-        private void ProcessPacketData(Packet packet) {
-            LogInfo($"Client {_clients[packet.ConnectionId].Address} sent message");
+        private void OnData(Packet packet) {
             var message = MessagePackSerializer.Deserialize<Message>(packet.Data);
             message.ConnectionId = packet.ConnectionId;
+            
+            // Filter with middleware
+            if (UseMiddlewares) {
+                foreach (var middleware in _middlewares) {
+                    if (!middleware.Filter(this ,message)) {
+                        Console.WriteLine("Message from client was not accepted.");
+                        return;
+                    }    
+                } 
+            }
+
+            // Dispatch the packet is filtering is finished
             _dispatcher.Dispatch(message);
         }
 
-        /// <summary>
-        /// Stop the server.
-        /// </summary>
-        public void Stop() {
-            if (!Running) {
-                throw new Exception("Server not running");
-            }
-
-            _shouldRun = false;
-            NetworkingServer.Stop();
-            _running = false;
-            OnServerStopped(this, new EventArgs());
-            LogInfo("Server stopped.");
-        }
+        #endregion
+        
     }
 }

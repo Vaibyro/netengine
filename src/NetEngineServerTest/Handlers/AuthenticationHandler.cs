@@ -15,13 +15,14 @@ namespace NetEngineServerTest.Handlers {
         }
 
         protected override void ProcessMessage(AuthenticationMessage message) {
-            Console.WriteLine("Handling auth : " + message.Username + " " + message.Password);
+            // todo: temporary
+            Console.WriteLine("[AUTH HANDLER] Received auth! : " + message.Username + " / " + message.Password);
 
+            // ...
             // Do the authentication process here...
-
-            var connection = Server.GetClient(message.ConnectionId);
-            connection.Identifier = message.Username;
-            connection.Authenticated = true;
+            // ...
+            
+            Server.AuthenticateClient(message.ConnectionId, message.Username);
         }
     }
-}
+} 

@@ -155,7 +155,9 @@ namespace NetEngineCore.Networking {
         // a new thread for each one.
         public bool Start(int port) {
             // not if already started
-            if (Active) return false;
+            if (Active) {
+                return false;
+            }
 
             // clear old messages in queue, just to be sure that the caller
             // doesn't receive data from last time and gets out of sync.
