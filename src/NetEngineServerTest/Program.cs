@@ -6,7 +6,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using NetEngineCore.Messaging;
 using NetEngineServer;
+using NetEngineServer.Filtering;
+using NetEngineServerTest.Filters;
 using NetEngineServerTest.Handlers;
+using NetEngineServerTest.Filters;
 
 
 namespace NetEngineServerTest {
@@ -21,6 +24,9 @@ namespace NetEngineServerTest {
             // Adding two handlers
             Server.Dispatcher.AttachHandler(typeof(AuthenticationMessage), new AuthenticationHandler(Server));
             Server.Dispatcher.AttachHandler(typeof(ExampleMessage), new ExampleServerHandler(Server));
+            
+            // Adding middlewares
+            Server.AttachFilter(new AuthenticationFilter());
             
             // Adding some events
             Server.Stopped += ServerStopped;

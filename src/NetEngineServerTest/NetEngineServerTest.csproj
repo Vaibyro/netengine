@@ -51,6 +51,7 @@
   <ItemGroup>
     <Compile Include="Handlers\AuthenticationHandler.cs" />
     <Compile Include="Handlers\ExampleServerHandler.cs" />
+    <Compile Include="Filters\ExampleFilter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

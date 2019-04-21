@@ -4,10 +4,8 @@ using System.Net.Sockets;
 using System.Threading;
 using NetEngineCore.Networking.Exceptions;
 
-namespace NetEngineCore.Networking
-{
-    public class Client : Common
-    {
+namespace NetEngineCore.Networking {
+    public class Client : Common {
         private static NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
 
         public TcpClient client;
@@ -47,12 +45,10 @@ namespace NetEngineCore.Networking
         ManualResetEvent sendPending = new ManualResetEvent(false);
 
         // the thread function
-        void ReceiveThreadFunction(string ip, int port)
-        {
+        void ReceiveThreadFunction(string ip, int port) {
             // absolutely must wrap with try/catch, otherwise thread
             // exceptions are silent
-            try
-            {
+            try {
                 // connect (blocking)
                 client.Connect(ip, port);
                 _connecting = false;
@@ -64,18 +60,15 @@ namespace NetEngineCore.Networking
 
                 // run the receive loop
                 ReceiveLoop(0, client, receiveQueue, MaxMessageSize);
-            }
-            catch (SocketException exception)
-            {
+            } catch (SocketException exception) {
                 // this happens if (for example) the ip address is correct
                 // but there is no server running on that ip/port
                 // add 'Disconnected' event to message queue so that the caller
                 // knows that the Connect failed. otherwise they will never know
                 receiveQueue.Enqueue(new Packet(0, PacketType.Disconnection, null));
-                throw new Exception("Client Recv: failed to connect to ip=" + ip + " port=" + port + " reason=" + exception);
-            }
-            catch (Exception exception)
-            {
+                throw new Exception("Client Recv: failed to connect to ip=" + ip + " port=" + port + " reason=" +
+                                    exception);
+            } catch (Exception exception) {
                 // something went wrong. probably important.
                 throw new Exception("Client Recv Exception: " + exception);
             }
@@ -98,8 +91,7 @@ namespace NetEngineCore.Networking
             client.Close();
         }
 
-        public void Connect(string ip, int port)
-        {
+        public void Connect(string ip, int port) {
             // not if already started
             if (Connecting || Connected) return;
 
@@ -130,11 +122,9 @@ namespace NetEngineCore.Networking
             _receiveThread.Start();
         }
 
-        public void Disconnect()
-        {
+        public void Disconnect() {
             // only if started
-            if (Connecting || Connected)
-            {
+            if (Connecting || Connected) {
                 // close client
                 client.Close();
 
@@ -153,13 +143,10 @@ namespace NetEngineCore.Networking
             }
         }
 
-        public bool Send(byte[] data)
-        {
-            if (Connected)
-            {
+        public bool Send(byte[] data) {
+            if (Connected) {
                 // respect max message size to avoid allocation attacks.
-                if (data.Length <= MaxMessageSize)
-                {
+                if (data.Length <= MaxMessageSize) {
                     // add to send queue and return immediately.
                     // calling Send here would be blocking (sometimes for long times
                     // if other side lags or wire was disconnected)
@@ -167,11 +154,11 @@ namespace NetEngineCore.Networking
                     sendPending.Set(); // interrupt SendThread WaitOne()
                     return true;
                 }
+
                 throw new OverSizedMessageException("Message too big: " + data.Length + ". Limit: " + MaxMessageSize);
-                return false;
             }
+
             throw new LostConnectionException("Client lost connection to the server");
-            return false;
         }
     }
 }

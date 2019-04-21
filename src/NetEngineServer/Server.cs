@@ -2,11 +2,14 @@
 using NetEngineCore.Messaging;
 using NetEngineCore.Networking;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Runtime.Caching;
 using System.Threading;
 using System.Threading.Tasks;
+using NetEngineServer.Filtering;
 using NetEngineServer.Messaging.Dispatching;
 using NetEngineServer.Utils;
 
@@ -27,6 +30,7 @@ namespace NetEngineServer {
         
         // Dispatcher
         private readonly ServerMessageDispatcher _dispatcher;
+        private readonly ICollection<IFilter> _middlewares;
         
         // Clients
         private ClientPool _clients = new ClientPool(); // Client pool
@@ -97,13 +101,31 @@ namespace NetEngineServer {
         /// </summary>
         public bool UseSsl { get; set; }
         
+        /// <summary>
+        /// Get or set the certificate path. todo
+        /// </summary>
         public string Certificate { get; set; }
+        
+        /// <summary>
+        /// Get or set whether the server uses whitelist to handle connections. todo
+        /// </summary>
+        public bool UseWhiteList { get; set; }
+        
+        /// <summary>
+        /// Get or set whether the server uses whitelist to handle connections. todo
+        /// </summary>
+        public bool UseBlackList { get; set; }
         
         /// <summary>
         /// Get a set of whitelisted ips. todo
         /// </summary>
-        public HashSet<string> IpWhiteList { get; } = new HashSet<string>();
+        public HashSet<IPAddress> IpWhiteList { get; } = new HashSet<IPAddress>();
 
+        /// <summary>
+        /// Get a set of blacklisted ips. todo
+        /// </summary>
+        public HashSet<IPAddress> IpBlackList { get; } = new HashSet<IPAddress>();
+        
         /// <summary>
         /// Get the dispatcher.
         /// </summary>
@@ -118,6 +140,8 @@ namespace NetEngineServer {
         /// Get or set the maximum amount of waiting clients (for authentication). todo
         /// </summary>
         public int MaxWaitingClients { get; set; }
+
+        public bool UseMiddlewares { get; set; } = true;
         
         #endregion
 
@@ -144,6 +168,7 @@ namespace NetEngineServer {
         public Server(int port) {
             Port = port;
             _dispatcher = new ServerMessageDispatcher(this);
+            _middlewares = new List<IFilter>();
         }
 
         #endregion
@@ -359,6 +384,30 @@ namespace NetEngineServer {
              Stopped(this, new EventArgs());
              LogInfo("Server stopped.");
          }
+
+         /// <summary>
+         /// Attach a middleware.
+         /// </summary>
+         /// <param name="middleware"></param>
+         public void AttachFilter(IFilter middleware) {
+             _middlewares.Add(middleware);
+         }
+
+         /// <summary>
+         /// Detach a middleware.
+         /// </summary>
+         /// <param name="middleware"></param>
+         public void DetachFilter(IFilter middleware) {
+             _middlewares.Remove(middleware);
+         }
+
+         public bool IsAuthenticated(Client client) {
+             return IsAuthenticated(client.Id);
+         }
+
+         public bool IsAuthenticated(int id) {
+             return _authWaitList.ContainsKey(id.ToString());
+         }
          
         #endregion
 
@@ -397,6 +446,18 @@ namespace NetEngineServer {
         private void OnData(Packet packet) {
             var message = MessagePackSerializer.Deserialize<Message>(packet.Data);
             message.ConnectionId = packet.ConnectionId;
+            
+            // Filter with middleware
+            if (UseMiddlewares) {
+                foreach (var middleware in _middlewares) {
+                    if (!middleware.Filter(this ,message)) {
+                        Console.WriteLine("Message from client was not accepted.");
+                        return;
+                    }    
+                } 
+            }
+
+            // Dispatch the packet is filtering is finished
             _dispatcher.Dispatch(message);
         }
 
