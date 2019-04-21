@@ -9,20 +9,32 @@ using System.Runtime.Remoting.Messaging;
 namespace NetEngineServer {
     public class ClientPool : IEnumerable<Client> {
         private readonly ConcurrentDictionary<int, Client> _clientsId = new ConcurrentDictionary<int, Client>();
-        private readonly ConcurrentDictionary<string, Client> _clientsIdentifier = new ConcurrentDictionary<string, Client>();
+
+        private readonly ConcurrentDictionary<string, Client> _clientsIdentifier =
+            new ConcurrentDictionary<string, Client>();
+
+        public bool GenerateIdentifier { get; set; } = true;
 
         public void Add(Client client) {
+            if (client.Identifier == null) {
+                if (GenerateIdentifier) {
+                    client.Identifier = Guid.NewGuid().ToString();
+                } else {
+                    throw new Exception("Client has no identifier");
+                }
+            }
+
             _clientsId.TryAdd(client.Id, client);
             _clientsIdentifier.TryAdd(client.Identifier, client);
         }
 
         public void Remove(int id) {
             var a = _clientsId.TryRemove(id, out var c);
-            if(!a)
+            if (!a)
                 throw new Exception("Cannot remove from id");
             var b = _clientsIdentifier.TryRemove(c.Identifier, out _);
             if (b) return;
-            
+
             // Only to revert
             _clientsId.GetOrAdd(c.Id, c);
             throw new Exception("Cannot remove from identifier");
@@ -35,7 +47,7 @@ namespace NetEngineServer {
 
             return val;
         }
-        
+
         public Client this[string key] {
             get => _clientsIdentifier[key];
             set => _clientsIdentifier[key] = value;
@@ -53,7 +65,7 @@ namespace NetEngineServer {
 
         public IEnumerable<int> Ids => _clientsId.Keys;
         public IEnumerable<string> Identifiers => _clientsIdentifier.Keys;
-        
+
         public Client this[int key] {
             get => _clientsId[key];
             set => _clientsId[key] = value;
@@ -64,7 +76,7 @@ namespace NetEngineServer {
         }
 
         public IEnumerator GetEnumerator() {
-            return _clientsId.GetEnumerator();
+            return _clientsId.Values.GetEnumerator();
         }
     }
 }

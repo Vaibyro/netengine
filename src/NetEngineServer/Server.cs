@@ -20,7 +20,6 @@ namespace NetEngineServer {
         private ClientPool _clients = new ClientPool();
         private readonly ServerMessageDispatcher _dispatcher;
         private volatile bool _running = false;
-        
         private SafeCacheDictionary<Client> _authWaitList = new SafeCacheDictionary<Client>();
         
         // todo: make the authentication list

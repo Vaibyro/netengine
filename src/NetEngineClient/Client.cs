@@ -113,7 +113,7 @@ namespace NetEngineClient {
         /// </summary>
         /// <param name="message"></param>
         public void Send(Message message) {
-            var binaryMessage = MessagePack.MessagePackSerializer.Serialize(message);
+            var binaryMessage = MessagePackSerializer.Serialize(message);
             _client.Send(binaryMessage);
         }
 
