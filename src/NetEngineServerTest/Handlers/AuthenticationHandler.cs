@@ -16,7 +16,7 @@ namespace NetEngineServerTest.Handlers {
 
         protected override void ProcessMessage(AuthenticationMessage message) {
             // todo: temporary
-            Console.WriteLine("[Auth Handler] Received auth! : " + message.Username + " / " + message.Password);
+            Console.WriteLine("[AUTH HANDLER] Received auth! : " + message.Username + " / " + message.Password);
 
             // ...
             // Do the authentication process here...

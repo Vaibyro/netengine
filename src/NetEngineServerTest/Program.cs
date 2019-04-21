@@ -10,22 +10,28 @@ using NetEngineServerTest.Handlers;
 
 
 namespace NetEngineServerTest {
-    internal class Program {    
+    internal class Program {
+        private static NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
+        public static Server Server;
+        
         public static void Main(string[] args) {
             // Instantiate a server with the port 1337
-            var server = new Server(1337);
+            Server = new Server(1337);
             
             // Adding two handlers
-            server.Dispatcher.AttachHandler(typeof(AuthenticationMessage), new AuthenticationHandler(server));
-            server.Dispatcher.AttachHandler(typeof(ExampleMessage), new ExampleServerHandler(server));
+            Server.Dispatcher.AttachHandler(typeof(AuthenticationMessage), new AuthenticationHandler(Server));
+            Server.Dispatcher.AttachHandler(typeof(ExampleMessage), new ExampleServerHandler(Server));
             
             // Adding some events
-            server.Stopped += ServerStopped;
-            server.ClientConnected += NewClient;
-            server.ClientDisconnected += LostClient;
+            Server.Stopped += ServerStopped;
+            Server.ClientConnected += NewClient;
+            Server.ClientDisconnected += LostClient;
+            Server.ClientAuthenticated += ClientAuthenticated;
+            Server.Starting += ServerStarting;
+            Server.Ready += ServerStarted;
             
             // Run the server
-            server.Run(); 
+            Server.Run(); 
 
             // To write some commands
             while (true) {
@@ -33,11 +39,11 @@ namespace NetEngineServerTest {
                 switch (line) {
                     case "stop":
                         Console.WriteLine("Stopping server...");
-                        server.Stop();
-                        SpinWait.SpinUntil(() => server.Running, 2000); 
+                        Server.Stop();
+                        SpinWait.SpinUntil(() => Server.Running, 2000); 
                         return;
                     case "list":
-                        foreach (Client conn in server.GetClients()) {
+                        foreach (Client conn in Server.GetClients()) {
                             string auth = conn.Authenticated ? conn.Identifier : "Anonymous";
                             Console.WriteLine($"- {conn.Id} ({conn.Address}) [{auth}]");
                         }
@@ -46,9 +52,9 @@ namespace NetEngineServerTest {
                     case var val when new Regex(@"kick ([a-zA-Z0-9*]+)").IsMatch(val):
                         var user = (new Regex(@"kick ([a-zA-Z0-9*]+)").Match(line)).Groups[1].Value;
                         if (user == "*") {
-                            server.ForceDisconnectAll();
+                            Server.ForceDisconnectAll();
                         } else {
-                            server.ForceDisconnectClient(int.Parse(user));
+                            Server.ForceDisconnectClient(int.Parse(user));
                         }
 
                         break;
@@ -56,7 +62,7 @@ namespace NetEngineServerTest {
                         var m = new ExampleMessage() {
                             Content = line
                         };
-                        server.Broadcast(m);
+                        Server.Broadcast(m);
                         Console.WriteLine($"Message '{line}' sent!");
                         break;
                 }
@@ -64,15 +70,27 @@ namespace NetEngineServerTest {
         }
         
         public static void ServerStopped(object sender, EventArgs args) {
-            Console.WriteLine("[From event firing] Server has been stopped!");
+            _logger.Info("Server stopped.");
         }
         
-        public static void NewClient(object sender, EventArgs args) {
-            Console.WriteLine("[From event firing] New client!");
+        public static void ServerStarting(object sender, EventArgs args) {
+            _logger.Info($"Server starting on port {Server.Port}...");
         }
         
-        public static void LostClient(object sender, EventArgs args) {
-            Console.WriteLine("[From event firing] A client has gone!");
+        public static void ServerStarted(object sender, EventArgs args) {
+            _logger.Info($"Server started.");
+        }
+        
+        public static void NewClient(object sender, ClientEventArgs args) {
+            _logger.Info($"New client connected ({args.Client.Address}), not yet authenticated.");
+        }
+        
+        public static void ClientAuthenticated(object sender, ClientEventArgs args) {
+            _logger.Info($"Client authenticated ({args.Client.Address} - {args.Client.Identifier}).");
+        }
+        
+        public static void LostClient(object sender, ClientEventArgs args) {
+            _logger.Info($"A client has gone ({args.Client.Address}).");
         }
     }
 }

@@ -97,6 +97,8 @@ namespace NetEngineServer {
         /// </summary>
         public bool UseSsl { get; set; }
         
+        public string Certificate { get; set; }
+        
         /// <summary>
         /// Get a set of whitelisted ips. todo
         /// </summary>
@@ -121,14 +123,14 @@ namespace NetEngineServer {
 
 
         #region Events
-
+        public delegate void ClientEventHandler(object sender, ClientEventArgs e);
         public event EventHandler Ready = delegate { };
         public event EventHandler Starting = delegate { };
         public event EventHandler Stopped = delegate { };
         public event EventHandler Stopping = delegate { };
-        public event EventHandler ClientConnected = delegate { };
-        public event EventHandler ClientDisconnected = delegate { };
-        public event EventHandler ClientAuthenticated = delegate { };
+        public event ClientEventHandler ClientConnected = delegate { };
+        public event ClientEventHandler ClientDisconnected = delegate { };
+        public event ClientEventHandler ClientAuthenticated = delegate { };
 
         #endregion
 
@@ -162,7 +164,6 @@ namespace NetEngineServer {
             Starting(this, new EventArgs());
             
             // Start the networking server
-            LogInfo($"Starting the server on port {Port}..."); // todo: useless because events...
             NetworkingServer = new NetEngineCore.Networking.Server();
             NetworkingServer.Start(Port);
 
@@ -172,13 +173,12 @@ namespace NetEngineServer {
 
             // Fire event "on server ready..."
             Ready(this, new EventArgs());
-            LogInfo($"Server listening for messages."); // todo: useless because events...
 
             var task = new Task(() => {
                 while (_shouldRun) {
                     // Cycle (create a watch to calculate elapsed time)
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-
+                    
                     // Consume all pending messages
                     while (NetworkingServer.GetNextMessage(out Packet packet)) {
                         // Treat message
@@ -235,9 +235,6 @@ namespace NetEngineServer {
          /// <param name="identifier"></param>
          public void AuthenticateClient(Client client, string identifier) {
              AuthenticateClient(client.Id, identifier);
-             
-             // Fire event "on client authenticated..."
-             ClientAuthenticated(this, new EventArgs());
          }
 
          /// <summary>
@@ -251,6 +248,9 @@ namespace NetEngineServer {
              client.Identifier = identifier;
              client.Authenticated = true;
              _clients.Add(client);
+                     
+             // Fire event "on client authenticated..."
+             ClientAuthenticated(this, new ClientEventArgs(client));
          }
          
          /// <summary>
@@ -370,14 +370,13 @@ namespace NetEngineServer {
         /// </summary>
         /// <param name="packet"></param>
         private void OnConnection(Packet packet) {
-            var connection = new Client(packet.ConnectionId,
+            var client = new Client(packet.ConnectionId,
                 NetworkingServer.GetClientAddress(packet.ConnectionId), this);
-            LogInfo($"Client {connection.ToString()} connected (not yet authenticated).");
 
             // Add the client to the auth waiting list
-            _authWaitList.Add(packet.ConnectionId.ToString(), connection, TimeSpan.FromMilliseconds(DefaultAuthTtl));
+            _authWaitList.Add(packet.ConnectionId.ToString(), client, TimeSpan.FromMilliseconds(DefaultAuthTtl));
             
-            ClientConnected(this, new EventArgs()); // todo: ClientEventArgs
+            ClientConnected(this, new ClientEventArgs(client));
         }
 
         /// <summary>
@@ -385,10 +384,10 @@ namespace NetEngineServer {
         /// </summary>
         /// <param name="packet"></param>
         private void OnDisconnection(Packet packet) {
-            var connection = _clients[packet.ConnectionId];
-            LogInfo($"Client {connection.ToString()} disconnected.");
+            var client = _clients[packet.ConnectionId];
+            LogInfo($"Client {client.ToString()} disconnected.");
             _clients.Remove(packet.ConnectionId);
-            ClientDisconnected(this, new EventArgs()); // todo: ClientEventArgs
+            ClientDisconnected(this, new ClientEventArgs(client));
         }
 
         /// <summary>
@@ -396,7 +395,6 @@ namespace NetEngineServer {
         /// </summary>
         /// <param name="packet"></param>
         private void OnData(Packet packet) {
-            LogInfo($"Client {_clients[packet.ConnectionId].Address} sent message");
             var message = MessagePackSerializer.Deserialize<Message>(packet.Data);
             message.ConnectionId = packet.ConnectionId;
             _dispatcher.Dispatch(message);

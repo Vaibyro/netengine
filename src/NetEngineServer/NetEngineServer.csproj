@@ -57,6 +57,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ClientEventArgs.cs" />
     <Compile Include="ClientPool.cs" />
     <Compile Include="SafeCacheDictionary.cs" />
     <Compile Include="Client.cs" />
