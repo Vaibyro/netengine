@@ -4,6 +4,7 @@ using NetEngineCore.Networking;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Caching;
 using System.Threading;
 using System.Threading.Tasks;
 using NetEngineServer.Messaging.Dispatching;
@@ -16,9 +17,13 @@ namespace NetEngineServer {
     public class Server {
         internal NetEngineCore.Networking.Server NetworkingServer;
         private bool _shouldRun = false;
-        private Dictionary<int, Client> _clients = new Dictionary<int, Client>();
+        private ClientPool _clients = new ClientPool();
         private readonly ServerMessageDispatcher _dispatcher;
         private volatile bool _running = false;
+        
+        private SafeCacheDictionary<Client> _authWaitList = new SafeCacheDictionary<Client>();
+        
+        // todo: make the authentication list
         
         /// <summary>
         /// Get whether the server is running.
@@ -30,6 +35,8 @@ namespace NetEngineServer {
         /// </summary>
         public bool AuthenticationMandatory { get; set; } = true;
 
+        public int DefaultAuthTTL => 1000;
+        
         /// <summary>
         /// Get the server port.
         /// </summary>
@@ -165,13 +172,12 @@ namespace NetEngineServer {
         /// </summary>
         /// <returns></returns>
         public IEnumerable<Client> GetClients() {
-            return _clients.Values.ToArray();
+            return _clients.ToList();
         }
 
         public void Broadcast(Message message) {
-            // Todo: to refactor with client class directly
-            foreach (var client in _clients) {
-                client.Value.Send(message);
+            foreach (Client client in _clients) {
+                client.Send(message);
             }
         }
 
@@ -180,7 +186,7 @@ namespace NetEngineServer {
         /// </summary>
         /// <param name="id"></param>
         public void ForceDisconnectClient(int id) {
-            if (!_clients.ContainsKey(id) && !NetworkingServer.IsClientConnected(id)) {
+            if (!_clients.Contains(id) && !NetworkingServer.IsClientConnected(id)) {
                 throw new Exception($"User with id {id} is not connected.");
             }
 
@@ -194,12 +200,12 @@ namespace NetEngineServer {
         /// </summary>
         public void ForceDisconnectAll() {
             LogInfo($"Disconnecting every player...");
-            if (_clients.Keys.Count == 0) {
+            if (_clients.Count == 0) {
                 LogInfo($"There is no player to disconnect.");
                 return;
             }
 
-            foreach (var key in _clients.Keys) {
+            foreach (var key in _clients.Ids) {
                 ForceDisconnectClient(key);
             }
 
@@ -233,7 +239,11 @@ namespace NetEngineServer {
             var connection = new Client(packet.ConnectionId,
                 NetworkingServer.GetClientAddress(packet.ConnectionId), this);
             LogInfo($"Client {connection.ToString()} connected (not yet authenticated).");
-            _clients.Add(packet.ConnectionId, connection);
+
+            // Add the client to the auth waitlist
+            //_authWaitList.Add(packet.ConnectionId.ToString(), connection, TimeSpan.FromMilliseconds(DefaultAuthTTL));
+            
+            _clients.Add(connection); // todo
             OnClientConnected(this, new EventArgs()); // todo: ClientEventArgs
         }
 
