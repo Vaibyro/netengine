@@ -63,9 +63,10 @@ namespace NetEngineCore.Networking {
                 // we might have multiple pending messages. merge into one
                 // packet to avoid TCP overheads and improve performance.
                 int packetSize = 0;
-                for (int i = 0; i < messages.Length; ++i)
+                for (int i = 0; i < messages.Length; ++i) {
                     packetSize += sizeof(int) + messages[i].Length; // header + content
-
+                }
+                
                 // create the packet
                 byte[] payload = new byte[packetSize];
                 int position = 0;
@@ -96,8 +97,9 @@ namespace NetEngineCore.Networking {
 
             // read exactly 4 bytes for header (blocking)
             byte[] header = new byte[4];
-            if (!stream.ReadExactly(header, 4))
+            if (!stream.ReadExactly(header, 4)) {
                 return false;
+            }
 
             // convert to int
             int size = Utils.BytesToIntBigEndian(header);

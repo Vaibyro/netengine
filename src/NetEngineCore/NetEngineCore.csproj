@@ -64,7 +64,6 @@
     <Compile Include="Messaging\Message.cs" />
     <Compile Include="Networking\Client.cs" />
     <Compile Include="Networking\Common.cs" />
-    <Compile Include="Networking\Connection.cs" />
     <Compile Include="Networking\Exceptions\LostConnectionException.cs" />
     <Compile Include="Networking\Exceptions\OverSizedMessageException.cs" />
     <Compile Include="Networking\NetworkStreamExtensions.cs" />
