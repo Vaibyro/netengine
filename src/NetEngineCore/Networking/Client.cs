@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Threading;
+using NetEngineCore.Networking.Exceptions;
 
 namespace NetEngineCore.Networking
 {
@@ -68,16 +69,15 @@ namespace NetEngineCore.Networking
             {
                 // this happens if (for example) the ip address is correct
                 // but there is no server running on that ip/port
-                _logger.Info("Client Recv: failed to connect to ip=" + ip + " port=" + port + " reason=" + exception);
-
                 // add 'Disconnected' event to message queue so that the caller
                 // knows that the Connect failed. otherwise they will never know
                 receiveQueue.Enqueue(new Packet(0, PacketType.Disconnection, null));
+                throw new Exception("Client Recv: failed to connect to ip=" + ip + " port=" + port + " reason=" + exception);
             }
             catch (Exception exception)
             {
                 // something went wrong. probably important.
-                _logger.Error("Client Recv Exception: " + exception);
+                throw new Exception("Client Recv Exception: " + exception);
             }
 
             // sendthread might be waiting on ManualResetEvent,
@@ -167,10 +167,10 @@ namespace NetEngineCore.Networking
                     sendPending.Set(); // interrupt SendThread WaitOne()
                     return true;
                 }
-                _logger.Error("Client.Send: message too big: " + data.Length + ". Limit: " + MaxMessageSize);
+                throw new OverSizedMessageException("Message too big: " + data.Length + ". Limit: " + MaxMessageSize);
                 return false;
             }
-            _logger.Warn("Client.Send: not connected!");
+            throw new LostConnectionException("Client lost connection to the server");
             return false;
         }
     }

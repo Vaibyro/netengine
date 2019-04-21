@@ -49,12 +49,12 @@ namespace NetEngineServer {
             get {
                 lock (Padlock) {
                     // Todo: maybe a bug could occur with the long to int cast
-                    return (int)_cache.GetCount();
+                    return (int) _cache.GetCount();
                 }
             }
         }
 
-        public bool IsReadOnly { get; }
+        public bool IsReadOnly => false; //todo
 
         public bool ContainsKey(string key) {
             lock (Padlock) {
@@ -73,7 +73,7 @@ namespace NetEngineServer {
                 _cache.Add(key, value, deadline);
             }
         }
-        
+
         public void Add(string key, TValue value, TimeSpan ttl) {
             lock (Padlock) {
                 _cache.Add(key, value, DateTime.Now.Add(ttl));

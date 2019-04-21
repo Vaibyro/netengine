@@ -70,11 +70,13 @@ namespace NetEngineClient {
         public void Run() {
             LogInfo("Launching client...");
             CreateConnection();
+            
             LogInfo("Connected to server.");
             LogInfo("Trying to authenticate...");
 
             // Authenticate the client.
-            Authenticate("testuser", "pass123");
+            SendAuthentication("testuser", "pass123");
+            
             LogInfo("Authentication packet sent.");
 
             var task = new Task(() => {
@@ -91,7 +93,7 @@ namespace NetEngineClient {
                         }
                     }
 
-                    // Todo: implement the definitive clock rate
+                    // Todo: implement the final clock rate
                     Thread.Sleep(20);
                 }
             });
@@ -103,7 +105,7 @@ namespace NetEngineClient {
         /// </summary>
         /// <param name="username"></param>
         /// <param name="password"></param>
-        public void Authenticate(string username, string password) {
+        public void SendAuthentication(string username, string password) {
             var authMessage = new AuthenticationMessage() {Username = username, Password = password};
             Send(authMessage);
         }
@@ -149,7 +151,7 @@ namespace NetEngineClient {
         }
 
         /// <summary>
-        /// Initiate the connection to the server.
+        /// Initiate the connection to the server. // todo: change this, not well implemented
         /// </summary>
         /// <exception cref="Exception"></exception>
         private void CreateConnection() {

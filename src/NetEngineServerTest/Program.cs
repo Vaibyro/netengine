@@ -20,9 +20,9 @@ namespace NetEngineServerTest {
             server.Dispatcher.AttachHandler(typeof(ExampleMessage), new ExampleServerHandler(server));
             
             // Adding some events
-            server.OnServerStopped += ServerStopped;
-            server.OnClientConnected += OnNewClient;
-            server.OnClientDisconnected += OnLostClient;
+            server.Stopped += ServerStopped;
+            server.ClientConnected += NewClient;
+            server.ClientDisconnected += LostClient;
             
             // Run the server
             server.Run(); 
@@ -67,11 +67,11 @@ namespace NetEngineServerTest {
             Console.WriteLine("[From event firing] Server has been stopped!");
         }
         
-        public static void OnNewClient(object sender, EventArgs args) {
+        public static void NewClient(object sender, EventArgs args) {
             Console.WriteLine("[From event firing] New client!");
         }
         
-        public static void OnLostClient(object sender, EventArgs args) {
+        public static void LostClient(object sender, EventArgs args) {
             Console.WriteLine("[From event firing] A client has gone!");
         }
     }
