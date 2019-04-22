@@ -18,11 +18,25 @@ namespace NetEngineServerTest.Handlers {
             // todo: temporary
             Console.WriteLine("[AUTH HANDLER] Received auth! : " + message.Username + " / " + message.Password);
 
-            // ...
-            // Do the authentication process here...
-            // ...
-            
+            if (!VerifyCredentials(message)) {
+                OnBadAuthentication(message);
+                return;
+            }
+
+            OnGoodAuthentication(message);
             Server.AuthenticateClient(message.ConnectionId, message.Username);
+        }
+
+        protected virtual bool VerifyCredentials(AuthenticationMessage message) {
+            return false; //todo
+        }
+
+        protected virtual void OnBadAuthentication(AuthenticationMessage message) {
+            Server.GetWaitingListClient(message.ConnectionId).Send(new ExampleMessage() {Content = "[SERVER] Bad credentials"});
+        }
+
+        protected virtual void OnGoodAuthentication(AuthenticationMessage message) {
+            Server.GetWaitingListClient(message.ConnectionId).Send(new ExampleMessage() {Content = "[SERVER] You are authenticated"});
         }
     }
 } 

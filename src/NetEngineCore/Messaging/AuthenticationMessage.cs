@@ -8,9 +8,6 @@ using System.Threading.Tasks;
 namespace NetEngineCore.Messaging {
     [MessagePackObject]
     public class AuthenticationMessage : Message {
-        [IgnoreMember]
-        public override bool NeedAuthentication => false;
-
         [Key(0)]
         public string Username { get; set; }
 

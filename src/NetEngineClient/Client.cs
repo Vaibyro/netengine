@@ -79,7 +79,7 @@ namespace NetEngineClient {
             
             LogInfo("Authentication packet sent.");
 
-            var task = new Task(() => {
+            var thread = new Thread(() => {
                 while (_shouldRun) {
                     if (!_client.Connected) {
                         // Maybe the server is suddenly down...
@@ -97,7 +97,7 @@ namespace NetEngineClient {
                     Thread.Sleep(20);
                 }
             });
-            task.Start();
+            thread.Start();
         }
 
         /// <summary>

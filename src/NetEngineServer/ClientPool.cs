@@ -16,6 +16,8 @@ namespace NetEngineServer {
         private readonly ConcurrentDictionary<string, Client> _clientsIdentifier =
             new ConcurrentDictionary<string, Client>();
 
+        private static object Lock = new object();
+
         public bool GenerateIdentifier { get; set; } = true;
 
         /// <summary>
@@ -84,7 +86,7 @@ namespace NetEngineServer {
 
             return val;
         }
-        
+
         /// <summary>
         /// Get a client from its identifier.
         /// </summary>
@@ -100,15 +102,28 @@ namespace NetEngineServer {
         }
 
         public Client this[string key] {
-            get => _clientsIdentifier[key];
+            get {
+                if (_clientsIdentifier.TryGetValue(key, out Client client)) {
+                    return client;
+                }
+
+                throw new Exception("Unable to get client.");
+            }
             set => _clientsIdentifier[key] = value;
         }
 
         public Client this[int key] {
-            get => _clientsId[key];
+            get {
+                if (_clientsId.TryGetValue(key, out Client client)) {
+                    return client;
+                }
+
+                throw new Exception("Unable to get client.");
+            }
+
             set => _clientsId[key] = value;
         }
-        
+
         /// <summary>
         /// Get whether a client exists in the pool from its Id.
         /// </summary>
@@ -127,6 +142,26 @@ namespace NetEngineServer {
             return _clientsIdentifier.ContainsKey(identifier);
         }
 
+        public bool TryGetValue(int id, out Client client) {
+            if (!Contains(id)) {
+                client = null;
+                return false;
+            }
+
+            client = Get(id);
+            return true;
+        }
+        
+        public bool TryGetValue(string identifier, out Client client) {
+            if (!Contains(identifier)) {
+                client = null;
+                return false;
+            }
+
+            client = Get(identifier);
+            return true;
+        }
+        
         /// <summary>
         /// Get the client pool size.
         /// </summary>
