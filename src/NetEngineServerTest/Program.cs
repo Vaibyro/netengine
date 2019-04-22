@@ -26,13 +26,14 @@ namespace NetEngineServerTest {
             Server.Dispatcher.AttachHandler(typeof(ExampleMessage), new ExampleServerHandler(Server));
             
             // Adding middlewares
-            Server.AttachFilter(new AuthenticationFilter());
+            Server.AttachFilter(new ExampleFilter());
             
             // Adding some events
             Server.Stopped += ServerStopped;
             Server.ClientConnected += NewClient;
             Server.ClientDisconnected += LostClient;
             Server.ClientAuthenticated += ClientAuthenticated;
+            Server.ClientEvicted += ClientEvicted;
             Server.Starting += ServerStarting;
             Server.Ready += ServerStarted;
             
@@ -97,6 +98,10 @@ namespace NetEngineServerTest {
         
         public static void LostClient(object sender, ClientEventArgs args) {
             _logger.Info($"A client has gone ({args.Client.Address}).");
+        }
+        
+        public static void ClientEvicted(object sender, ClientEventArgs args) {
+            _logger.Info($"A client has been evicted (no auth delay) ({args.Client.Address}).");
         }
     }
 }

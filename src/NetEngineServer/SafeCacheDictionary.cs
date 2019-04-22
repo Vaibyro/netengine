@@ -1,4 +1,5 @@
 using System;
+using System.CodeDom;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +10,7 @@ namespace NetEngineServer {
         private MemoryCache _cache = new MemoryCache("CachingProvider");
 
         private static readonly object Padlock = new object();
-
+        
         public IEnumerator<KeyValuePair<string, TValue>> GetEnumerator() {
             throw new NotImplementedException();
         }
@@ -63,21 +64,27 @@ namespace NetEngineServer {
         }
 
         public void Add(string key, TValue value) {
-            lock (Padlock) {
-                _cache.Add(key, value, DateTimeOffset.MaxValue);
-            }
+            Add(key, value, DateTimeOffset.MaxValue.DateTime);
         }
 
+        public Action<CacheEntryRemovedArguments> OnCacheRemove;
+        
         public void Add(string key, TValue value, DateTime deadline) {
             lock (Padlock) {
-                _cache.Add(key, value, deadline);
+                var policy = new CacheItemPolicy() {
+                    AbsoluteExpiration = new DateTimeOffset(deadline)
+                };
+                
+                if (OnCacheRemove != null) {
+                    policy.RemovedCallback = new CacheEntryRemovedCallback(OnCacheRemove);
+                }
+                
+                _cache.Set(key, value, policy);
             }
         }
-
+        
         public void Add(string key, TValue value, TimeSpan ttl) {
-            lock (Padlock) {
-                _cache.Add(key, value, DateTime.Now.Add(ttl));
-            }
+            Add(key, value, DateTime.Now.Add(ttl));
         }
 
         public bool Remove(string key) {

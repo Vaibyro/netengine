@@ -11,7 +11,5 @@ namespace NetEngineCore.Messaging {
     public abstract class Message {
         [IgnoreMember]
         public int ConnectionId { get; set; }
-
-        public abstract bool NeedAuthentication { get; }
     }
 }

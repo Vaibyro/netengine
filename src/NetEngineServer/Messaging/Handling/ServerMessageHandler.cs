@@ -25,13 +25,6 @@ namespace NetEngineServer.Messaging.Handling {
         /// </summary>
         /// <param name="message"></param>
         public override void Handle(Message message) {
-            // If authentication is mandatory, the message cannot be received if the user is not authenticated.
-            if (Server.AuthenticationMandatory && message.NeedAuthentication && !Server.GetClient(message.ConnectionId).Authenticated) {
-                // Kick the user, maybe he is trying to cheat
-                Server.ForceDisconnectClient(message.ConnectionId);
-                return;
-            }
-
             // Otherwise, it is okay to process the message
             ProcessMessage((T) message);
         }

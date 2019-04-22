@@ -5,14 +5,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace NetEngineCore.Messaging
-{
+namespace NetEngineCore.Messaging {
     [MessagePackObject]
-    public class ExampleMessage : Message
-    {
-        [IgnoreMember]
-        public override bool NeedAuthentication => false;
-
+    public class ExampleMessage : Message {
         [Key(0)]
         public string Content { get; set; }
     }
