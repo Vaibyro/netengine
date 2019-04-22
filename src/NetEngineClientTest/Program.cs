@@ -20,7 +20,7 @@ namespace NetEngineClientTest {
                 var line = Console.ReadLine();
                 switch (line) {
                     default:
-                        var m = new ExampleMessage() {
+                        var m = new ExampleMessage {
                             Content = line
                         };
                         client.Send(m);

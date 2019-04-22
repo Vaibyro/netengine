@@ -9,8 +9,8 @@ namespace NetEngineCore.Networking {
         private static NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
 
         public TcpClient client;
-        Thread _receiveThread;
-        Thread _sendThread;
+        private Thread _receiveThread;
+        private Thread _sendThread;
 
         // TcpClient.Connected doesn't check if socket != null, which
         // results in NullReferenceExceptions if connection was closed.
@@ -31,7 +31,7 @@ namespace NetEngineCore.Networking {
         // => bools are atomic according to
         //    https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/variables
         //    made volatile so the compiler does not reorder access to it
-        volatile bool _connecting;
+        private volatile bool _connecting;
         public bool Connecting => _connecting;
 
         // send queue
@@ -59,13 +59,13 @@ namespace NetEngineCore.Networking {
                 _sendThread.Start();
 
                 // run the receive loop
-                ReceiveLoop(0, client, receiveQueue, MaxMessageSize);
+                ReceiveLoop(0, client, ReceiveQueue, MaxMessageSize);
             } catch (SocketException exception) {
                 // this happens if (for example) the ip address is correct
                 // but there is no server running on that ip/port
                 // add 'Disconnected' event to message queue so that the caller
                 // knows that the Connect failed. otherwise they will never know
-                receiveQueue.Enqueue(new Packet(0, PacketType.Disconnection, null));
+                ReceiveQueue.Enqueue(new Packet(0, PacketType.Disconnection, null));
                 throw new Exception("Client Recv: failed to connect to ip=" + ip + " port=" + port + " reason=" +
                                     exception);
             } catch (Exception exception) {
@@ -91,6 +91,13 @@ namespace NetEngineCore.Networking {
             client.Close();
         }
 
+        #region Public methods
+        
+        /// <summary>
+        /// Connect the client to a server.
+        /// </summary>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
         public void Connect(string ip, int port) {
             // not if already started
             if (Connecting || Connected) {
@@ -102,15 +109,13 @@ namespace NetEngineCore.Networking {
 
             // TcpClient can only be used once. need to create a new one each
             // time.
-            client = new TcpClient();
-            client.NoDelay = NoDelay;
-            client.SendTimeout = SendTimeout;
+            client = new TcpClient {NoDelay = NoDelay, SendTimeout = SendTimeout};
 
             // clear old messages in queue, just to be sure that the caller
             // doesn't receive data from last time and gets out of sync.
             // -> calling this in Disconnect isn't smart because the caller may
             //    still want to process all the latest messages afterwards
-            receiveQueue = new ConcurrentQueue<Packet>();
+            ReceiveQueue = new ConcurrentQueue<Packet>();
             sendQueue.Clear();
 
             // client.Connect(ip, port) is blocking. let's call it in the thread
@@ -124,6 +129,9 @@ namespace NetEngineCore.Networking {
             _receiveThread.Start();
         }
 
+        /// <summary>
+        /// Disconnect the client from the server.
+        /// </summary>
         public void Disconnect() {
             // only if started
             if (Connecting || Connected) {
@@ -145,6 +153,13 @@ namespace NetEngineCore.Networking {
             }
         }
 
+        /// <summary>
+        /// Send bytes to the server.
+        /// </summary>
+        /// <param name="data"></param>
+        /// <returns></returns>
+        /// <exception cref="OverSizedMessageException"></exception>
+        /// <exception cref="LostConnectionException"></exception>
         public bool Send(byte[] data) {
             if (Connected) {
                 // respect max message size to avoid allocation attacks.
@@ -162,5 +177,9 @@ namespace NetEngineCore.Networking {
 
             throw new LostConnectionException("Client lost connection to the server");
         }
+        
+        #endregion
+        
+        
     }
 }

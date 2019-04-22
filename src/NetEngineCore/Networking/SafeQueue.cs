@@ -12,31 +12,35 @@ using System.Collections.Generic;
 
 namespace NetEngineCore.Networking {
     public class SafeQueue<T> {
-        Queue<T> queue = new Queue<T>();
+        private readonly Queue<T> _queue = new Queue<T>();
 
         // for statistics. don't call Count and assume that it's the same after the
         // call.
         public int Count {
             get {
-                lock (queue) {
-                    return queue.Count;
+                lock (_queue) {
+                    return _queue.Count;
                 }
             }
         }
 
+        /// <summary>
+        /// Enqueue.
+        /// </summary>
+        /// <param name="item"></param>
         public void Enqueue(T item) {
-            lock (queue) {
-                queue.Enqueue(item);
+            lock (_queue) {
+                _queue.Enqueue(item);
             }
         }
 
         // can't check .Count before doing Dequeue because it might change inbetween,
         // so we need a TryDequeue
         public bool TryDequeue(out T result) {
-            lock (queue) {
+            lock (_queue) {
                 result = default(T);
-                if (queue.Count > 0) {
-                    result = queue.Dequeue();
+                if (_queue.Count > 0) {
+                    result = _queue.Dequeue();
                     return true;
                 }
 
@@ -47,16 +51,19 @@ namespace NetEngineCore.Networking {
         // for when we want to dequeue and remove all of them at once without
         // locking every single TryDequeue.
         public bool TryDequeueAll(out T[] result) {
-            lock (queue) {
-                result = queue.ToArray();
-                queue.Clear();
+            lock (_queue) {
+                result = _queue.ToArray();
+                _queue.Clear();
                 return result.Length > 0;
             }
         }
 
+        /// <summary>
+        /// Clear the queue.
+        /// </summary>
         public void Clear() {
-            lock (queue) {
-                queue.Clear();
+            lock (_queue) {
+                _queue.Clear();
             }
         }
     }

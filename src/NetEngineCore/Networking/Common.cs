@@ -2,21 +2,55 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Threading;
 
 namespace NetEngineCore.Networking {
     public abstract class Common {
-        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+        
+        #region Properties
 
-        // common code /////////////////////////////////////////////////////////
-        // incoming message queue of <connectionId, message>
-        // (not a HashSet because one connection can have multiple new messages)
-        protected ConcurrentQueue<Packet> receiveQueue = new ConcurrentQueue<Packet>();
+        /// <summary>
+        /// Accept invalid certificates or not.
+        /// </summary>
+        public bool AcceptInvalidCertificates { get; set; } = true;
+        
+        public bool UseSsl { get; set; }
+        
+        /// <summary>
+        /// Get the queue count, useful for debugging / benchmarks.
+        /// </summary>
+        public int ReceiveQueueCount => ReceiveQueue.Count;
+        
+        /// <summary>
+        /// Enable or disable nagle algorithm. lowers CPU% and latency but increases bandwidth
+        /// </summary>
+        public bool NoDelay { get; set; } = true;
+        
+        // Prevent allocation attacks. Each packet is prefixed with a length
+        // header, so an attacker could send a fake packet with length=2GB,
+        // causing the server to allocate 2GB and run out of memory quickly.
+        // -> simply increase max packet size if you want to send around bigger
+        //    files!
+        // -> 16KB per message should be more than enough.
+        /// <summary>
+        /// Get or set the maximum message size in bytes.
+        /// </summary>
+        public int MaxMessageSize { get; set; } = 16 * 1024;
+        
+        // Send would stall forever if the network is cut off during a send, so
+        // we need a timeout (in milliseconds)
+        /// <summary>
+        /// Get or set the network timeout (in milliseconds).
+        /// </summary>
+        public int SendTimeout { get; set; } = 5000;
 
-        // queue count, useful for debugging / benchmarks
-        public int ReceiveQueueCount => receiveQueue.Count;
-
+        #endregion
+        
+        
+        #region Public members
+        
         // warning if message queue gets too big
         // if the average message is about 20 bytes then:
         // -   1k messages are   20KB
@@ -24,8 +58,31 @@ namespace NetEngineCore.Networking {
         // - 100k messages are 1.95MB
         // 2MB are not that much, but it is a bad sign if the caller process
         // can't call GetNextMessage faster than the incoming messages.
-        public static int messageQueueSizeWarning = 100000;
+        /// <summary>
+        /// Message queue size warning.
+        /// </summary>
+        public static int MessageQueueSizeWarning { get; set; } = 100000;
 
+        #endregion
+        
+        
+        #region Private members
+        
+        /// <summary>
+        /// incoming message queue of (connectionId, message)
+        /// (not a HashSet because one connection can have multiple new messages)
+        /// </summary>
+        protected ConcurrentQueue<Packet> ReceiveQueue = new ConcurrentQueue<Packet>();
+        
+        protected SslStream _sslStream;
+        
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+        
+        #endregion
+
+        
+        #region Public methods
+        
         // removes and returns the oldest message from the message queue.
         // (might want to call this until it doesn't return anything anymore)
         // -> Connected, Data, Disconnected events are all added here
@@ -33,24 +90,13 @@ namespace NetEngineCore.Networking {
         // -> no 'is client connected' check because we still want to read the
         //    Disconnected message after a disconnect
         public bool GetNextMessage(out Packet message) {
-            return receiveQueue.TryDequeue(out message);
+            return ReceiveQueue.TryDequeue(out message);
         }
+        
+        #endregion
 
-        // NoDelay disables nagle algorithm. lowers CPU% and latency but
-        // increases bandwidth
-        public bool NoDelay = true;
 
-        // Prevent allocation attacks. Each packet is prefixed with a length
-        // header, so an attacker could send a fake packet with length=2GB,
-        // causing the server to allocate 2GB and run out of memory quickly.
-        // -> simply increase max packet size if you want to send around bigger
-        //    files!
-        // -> 16KB per message should be more than enough.
-        public int MaxMessageSize = 16 * 1024;
-
-        // Send would stall forever if the network is cut off during a send, so
-        // we need a timeout (in milliseconds)
-        public int SendTimeout = 5000;
+        #region Private methods
 
         // static helper functions /////////////////////////////////////////////
         // send message (via stream) with the <size,content> message structure
@@ -92,7 +138,7 @@ namespace NetEngineCore.Networking {
         }
 
         // read message (via stream) with the <size,content> message structure
-        protected static bool ReadMessageBlocking(NetworkStream stream, int MaxMessageSize, out byte[] content) {
+        protected static bool ReadMessageBlocking(NetworkStream stream, int maxMessageSize, out byte[] content) {
             content = null;
 
             // read exactly 4 bytes for header (blocking)
@@ -107,7 +153,7 @@ namespace NetEngineCore.Networking {
             // protect against allocation attacks. an attacker might send
             // multiple fake '2GB header' packets in a row, causing the server
             // to allocate multiple 2GB byte arrays and run out of memory.
-            if (size <= MaxMessageSize) {
+            if (size <= maxMessageSize) {
                 // read exactly 'size' bytes for content (blocking)
                 content = new byte[size];
                 return stream.ReadExactly(content, size);
@@ -153,8 +199,9 @@ namespace NetEngineCore.Networking {
                 while (true) {
                     // read the next message (blocking) or stop if stream closed
                     byte[] content;
-                    if (!ReadMessageBlocking(stream, MaxMessageSize, out content))
+                    if (!ReadMessageBlocking(stream, MaxMessageSize, out content)) {
                         break;
+                    }
 
                     // queue it
                     receiveQueue.Enqueue(new Packet(connectionId, PacketType.Data, content));
@@ -165,7 +212,7 @@ namespace NetEngineCore.Networking {
                     //    logging, which will make the queue pile up even more.
                     // -> instead we show it every 10s, so that the system can
                     //    use most it's processing power to hopefully process it.
-                    if (receiveQueue.Count > messageQueueSizeWarning) {
+                    if (receiveQueue.Count > MessageQueueSizeWarning) {
                         TimeSpan elapsed = DateTime.Now - messageQueueLastWarning;
                         if (elapsed.TotalSeconds > 10) {
                             logger.Warn("ReceiveLoop: messageQueue is getting big(" + receiveQueue.Count +
@@ -237,5 +284,9 @@ namespace NetEngineCore.Networking {
                 logger.Info("SendLoop Exception: connectionId=" + connectionId + " reason: " + exception);
             }
         }
+
+        #endregion
+     
+        
     }
 }
