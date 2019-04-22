@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Runtime.Caching;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using NetEngineServer.Filtering;
@@ -31,7 +32,6 @@ namespace NetEngineServer {
         private volatile bool _running = false;
 
         // Dispatcher
-        private readonly ServerMessageDispatcher _dispatcher;
         private readonly ICollection<IFilter> _middlewares;
 
         // Clients
@@ -104,7 +104,7 @@ namespace NetEngineServer {
         /// <summary>
         /// Get or set the maximum number of simultaneous connections.
         /// </summary>
-        public int MaxConnections { get; set; };
+        public int MaxConnections { get; set; }
 
         /// <summary>
         /// Get the current frequency.
@@ -114,12 +114,15 @@ namespace NetEngineServer {
         /// <summary>
         /// Tell the server to use SSL. todo
         /// </summary>
-        public bool UseSsl { get; set; }
+        public bool UseSsl {
+            get => NetworkingServer.UseSsl;
+            set => NetworkingServer.UseSsl = value;
+        }
 
         /// <summary>
         /// Get or set the certificate path. todo
         /// </summary>
-        public string Certificate { get; set; }
+        public string CertificateFile { get; set; }
 
         /// <summary>
         /// Get or set whether the server uses whitelist to handle connections. todo
@@ -144,7 +147,7 @@ namespace NetEngineServer {
         /// <summary>
         /// Get the dispatcher.
         /// </summary>
-        public ServerMessageDispatcher Dispatcher => _dispatcher;
+        public ServerMessageDispatcher Dispatcher { get; }
 
         /// <summary>
         /// Get or set the maximum amount of clients. todo
@@ -156,7 +159,10 @@ namespace NetEngineServer {
         /// </summary>
         public int MaxWaitingClients { get; set; }
 
-        public bool UseMiddlewares { get; set; } = true;
+        /// <summary>
+        /// Tell the server to use or not filtering logic.
+        /// </summary>
+        public bool UseFiltering { get; set; } = true;
 
         #endregion
 
@@ -185,9 +191,10 @@ namespace NetEngineServer {
         /// <param name="port"></param>
         public Server(int port) {
             Port = port;
-            _dispatcher = new ServerMessageDispatcher(this);
+            Dispatcher = new ServerMessageDispatcher(this);
             _middlewares = new List<IFilter>();
             _authWaitList.OnCacheRemove = OnAuthWaitingListAutoRemove;
+            NetworkingServer = new NetEngineCore.Networking.Server();
             AttachFilter(_authenticationFilter);
         }
 
@@ -208,8 +215,12 @@ namespace NetEngineServer {
             // Fire event "on server starting..."
             Starting(this, new EventArgs());
 
+            // SSL
+            if (UseSsl) {
+                NetworkingServer.SslCertificate = new X509Certificate2(CertificateFile);
+            }
+            
             // Start the networking server
-            NetworkingServer = new NetEngineCore.Networking.Server();
             NetworkingServer.Start(Port);
 
             // Update the server state
@@ -501,7 +512,7 @@ namespace NetEngineServer {
             message.ConnectionId = packet.ConnectionId;
 
             // Filter with middleware
-            if (UseMiddlewares) {
+            if (UseFiltering) {
                 foreach (var middleware in _middlewares) {
                     if (!middleware.Filter(this, message)) {
                         Console.WriteLine("Message from client was not accepted.");
@@ -511,7 +522,7 @@ namespace NetEngineServer {
             }
 
             // Dispatch the packet is filtering is finished
-            _dispatcher.Dispatch(message);
+            Dispatcher.Dispatch(message);
         }
 
         #endregion

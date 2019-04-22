@@ -1,3 +1,4 @@
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Threading;
 
@@ -5,7 +6,7 @@ namespace NetEngineCore.Networking {
     // class with all the client's data. let's call it Token for consistency
     // with the async socket methods.
     public class ClientToken {
-        public TcpClient client;
+        public TcpClient Client { get; }
 
         // send queue
         // SafeQueue is twice as fast as ConcurrentQueue, see SafeQueue.cs!
@@ -16,9 +17,16 @@ namespace NetEngineCore.Networking {
         // -> call Reset() if there is something to send again
         // -> call WaitOne() to block until Reset was called
         public ManualResetEvent sendPending = new ManualResetEvent(false);
-
+        
+        public SslStream SslStream { get; set; }
+        
         public ClientToken(TcpClient client) {
-            this.client = client;
+            Client = client;
+        }
+
+        public ClientToken(TcpClient client, SslStream stream) {
+            Client = client;
+            SslStream = stream;
         }
     }
 }

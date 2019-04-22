@@ -1,6 +1,7 @@
 ﻿using NetEngineCore.Messaging;
 using NetEngineCore.Networking;
 using System;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using MessagePack;
@@ -36,6 +37,19 @@ namespace NetEngineClient {
         public bool Connected => _client.Connected;
 
         /// <summary>
+        /// Tell the server to use SSL.
+        /// </summary>
+        public bool UseSsl {
+            get => _client.UseSsl;
+            set => _client.UseSsl = value;
+        }
+
+        /// <summary>
+        /// Get or set the certificate path. todo
+        /// </summary>
+        public string CertificateFile { get; set; }
+        
+        /// <summary>
         /// Error logger.
         /// </summary>
         public Action<string> LogError { get; set; } = Console.WriteLine;
@@ -69,6 +83,12 @@ namespace NetEngineClient {
         /// <exception cref="Exception"></exception>
         public void Run() {
             LogInfo("Launching client...");
+            
+            // SSL
+            if (UseSsl) {
+                _client.SslCertificate = new X509Certificate2(CertificateFile);
+            }
+            
             CreateConnection();
             
             LogInfo("Connected to server.");

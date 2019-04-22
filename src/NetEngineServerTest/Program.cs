@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net;
 using System.Runtime.Caching;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,6 +37,9 @@ namespace NetEngineServerTest {
             Server.ClientEvicted += ClientEvicted;
             Server.Starting += ServerStarting;
             Server.Ready += ServerStarted;
+
+            Server.UseSsl = true;
+            Server.CertificateFile = @"D:\Utilisateurs\Thomas\Documents\NetEngine\netengine.pfx";
             
             // Run the server
             Server.Run(); 

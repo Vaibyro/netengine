@@ -1,6 +1,10 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.IO;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using NetEngineCore.Networking.Exceptions;
 
@@ -11,6 +15,7 @@ namespace NetEngineCore.Networking {
         public TcpClient client;
         private Thread _receiveThread;
         private Thread _sendThread;
+        private Stream _stream;
 
         // TcpClient.Connected doesn't check if socket != null, which
         // results in NullReferenceExceptions if connection was closed.
@@ -45,7 +50,7 @@ namespace NetEngineCore.Networking {
         ManualResetEvent sendPending = new ManualResetEvent(false);
 
         // the thread function
-        void ReceiveThreadFunction(string ip, int port) {
+        private void ReceiveThreadFunction(string ip, int port) {
             // absolutely must wrap with try/catch, otherwise thread
             // exceptions are silent
             try {
@@ -53,13 +58,46 @@ namespace NetEngineCore.Networking {
                 client.Connect(ip, port);
                 _connecting = false;
 
+                // Stream
+                if (UseSsl) {
+                    // Here we are performing Ssl authentication
+                    //
+                    //
+                    var stream = new SslStream(client.GetStream(), false, AcceptCertificate);
+
+                    var sslCertificateCollection = new X509Certificate2Collection {
+                        SslCertificate
+                    };
+
+                    // TSL Authentication
+                    stream.AuthenticateAsClient(ip, sslCertificateCollection, SslProtocols.Tls12,
+                        !AcceptInvalidCertificates);
+
+                    if (!stream.IsEncrypted) {
+                        throw new AuthenticationException("Stream is not encrypted");
+                    }
+
+                    if (!stream.IsAuthenticated) {
+                        throw new AuthenticationException("Stream is not authenticated");
+                    }
+
+                    if (!stream.IsMutuallyAuthenticated) {
+                        //throw new AuthenticationException("Mutual authentication failed");
+                    }
+
+
+                    _stream = stream;
+                } else {
+                    _stream = client.GetStream();
+                }
+
                 // start send thread only after connected
-                _sendThread = new Thread(() => { SendLoop(0, client, sendQueue, sendPending); });
+                _sendThread = new Thread(() => { SendLoop(0, client, sendQueue, sendPending, _stream); });
                 _sendThread.IsBackground = true;
                 _sendThread.Start();
 
                 // run the receive loop
-                ReceiveLoop(0, client, ReceiveQueue, MaxMessageSize);
+                ReceiveLoop(0, client, ReceiveQueue, MaxMessageSize, _stream);
             } catch (SocketException exception) {
                 // this happens if (for example) the ip address is correct
                 // but there is no server running on that ip/port
@@ -92,7 +130,7 @@ namespace NetEngineCore.Networking {
         }
 
         #region Public methods
-        
+
         /// <summary>
         /// Connect the client to a server.
         /// </summary>
@@ -177,9 +215,7 @@ namespace NetEngineCore.Networking {
 
             throw new LostConnectionException("Client lost connection to the server");
         }
-        
+
         #endregion
-        
-        
     }
 }

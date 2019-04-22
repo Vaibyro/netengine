@@ -2,8 +2,11 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 
 namespace NetEngineCore.Networking {
@@ -15,8 +18,8 @@ namespace NetEngineCore.Networking {
         /// Accept invalid certificates or not.
         /// </summary>
         public bool AcceptInvalidCertificates { get; set; } = true;
-        
-        public bool UseSsl { get; set; }
+
+        public bool UseSsl { get; set; } = false;
         
         /// <summary>
         /// Get the queue count, useful for debugging / benchmarks.
@@ -74,8 +77,9 @@ namespace NetEngineCore.Networking {
         /// </summary>
         protected ConcurrentQueue<Packet> ReceiveQueue = new ConcurrentQueue<Packet>();
         
-        protected SslStream _sslStream;
-        
+        // SSL
+        public X509Certificate2 SslCertificate { get; set; }
+
         private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
         
         #endregion
@@ -89,6 +93,11 @@ namespace NetEngineCore.Networking {
         // -> bool return makes while (GetMessage(out Message)) easier!
         // -> no 'is client connected' check because we still want to read the
         //    Disconnected message after a disconnect
+        /// <summary>
+        /// Remove and returns the oldest message from the message queue.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <returns></returns>
         public bool GetNextMessage(out Packet message) {
             return ReceiveQueue.TryDequeue(out message);
         }
@@ -102,7 +111,7 @@ namespace NetEngineCore.Networking {
         // send message (via stream) with the <size,content> message structure
         // this function is blocking sometimes!
         // (e.g. if someone has high latency or wire was cut off)
-        protected static bool SendMessagesBlocking(NetworkStream stream, byte[][] messages) {
+        protected static bool SendMessagesBlocking(Stream stream, byte[][] messages) {
             // stream.Write throws exceptions if client sends with high
             // frequency and the server stops
             try {
@@ -125,7 +134,7 @@ namespace NetEngineCore.Networking {
                     Array.Copy(messages[i], 0, payload, position + header.Length, messages[i].Length);
                     position += header.Length + messages[i].Length;
                 }
-
+               
                 // write the whole thing
                 stream.Write(payload, 0, payload.Length);
 
@@ -137,8 +146,7 @@ namespace NetEngineCore.Networking {
             }
         }
 
-        // read message (via stream) with the <size,content> message structure
-        protected static bool ReadMessageBlocking(NetworkStream stream, int maxMessageSize, out byte[] content) {
+        protected static bool ReadMessageBlocking(Stream stream, int maxMessageSize, out byte[] content) {
             content = null;
 
             // read exactly 4 bytes for header (blocking)
@@ -153,11 +161,13 @@ namespace NetEngineCore.Networking {
             // protect against allocation attacks. an attacker might send
             // multiple fake '2GB header' packets in a row, causing the server
             // to allocate multiple 2GB byte arrays and run out of memory.
-            if (size <= maxMessageSize) {
+            // (size <= maxMessageSize) {
                 // read exactly 'size' bytes for content (blocking)
                 content = new byte[size];
+
+                
                 return stream.ReadExactly(content, size);
-            }
+            //}
 
             logger.Warn("ReadMessageBlocking: possible allocation attack with a header of: " + size + " bytes.");
             return false;
@@ -166,10 +176,10 @@ namespace NetEngineCore.Networking {
         // thread receive function is the same for client and server's clients
         // (static to reduce state for maximum reliability)
         protected static void ReceiveLoop(int connectionId, TcpClient client, ConcurrentQueue<Packet> receiveQueue,
-            int MaxMessageSize) {
+            int maxMessageSize, Stream stream) {
             // get NetworkStream from client
-            NetworkStream stream = client.GetStream();
-
+            //NetworkStream stream = client.GetStream();
+            
             // keep track of last message queue warning
             DateTime messageQueueLastWarning = DateTime.Now;
 
@@ -199,7 +209,7 @@ namespace NetEngineCore.Networking {
                 while (true) {
                     // read the next message (blocking) or stop if stream closed
                     byte[] content;
-                    if (!ReadMessageBlocking(stream, MaxMessageSize, out content)) {
+                    if (!ReadMessageBlocking(stream, maxMessageSize, out content)) {
                         break;
                     }
 
@@ -244,10 +254,17 @@ namespace NetEngineCore.Networking {
         // thread send function
         // note: we really do need one per connection, so that if one connection
         //       blocks, the rest will still continue to get sends
+        /// <summary>
+        /// Thread send function.
+        /// </summary>
+        /// <param name="connectionId"></param>
+        /// <param name="client"></param>
+        /// <param name="sendQueue"></param>
+        /// <param name="sendPending"></param>
         protected static void SendLoop(int connectionId, TcpClient client, SafeQueue<byte[]> sendQueue,
-            ManualResetEvent sendPending) {
+            ManualResetEvent sendPending, Stream stream) {
             // get NetworkStream from client
-            NetworkStream stream = client.GetStream();
+            // NetworkStream stream = client.GetStream();
 
             try {
                 while (client.Connected) // try this. client will get closed eventually.
@@ -266,8 +283,9 @@ namespace NetEngineCore.Networking {
                     byte[][] messages;
                     if (sendQueue.TryDequeueAll(out messages)) {
                         // send message (blocking) or stop if stream is closed
-                        if (!SendMessagesBlocking(stream, messages))
+                        if (!SendMessagesBlocking(stream, messages)) {
                             return;
+                        }
                     }
 
                     // don't choke up the CPU: wait until queue not empty anymore
@@ -285,6 +303,12 @@ namespace NetEngineCore.Networking {
             }
         }
 
+        protected bool AcceptCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            // return true; // Allow untrusted certificates.
+            return AcceptInvalidCertificates;
+        }
+        
         #endregion
      
         
