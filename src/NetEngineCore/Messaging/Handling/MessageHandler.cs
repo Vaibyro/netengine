@@ -8,13 +8,6 @@ using NetEngineCore.Networking;
 
 namespace NetEngineCore.Messaging.Handling {
     public abstract class MessageHandler<T> : IMessageHandler where T : Message {
-
-        /// <summary>
-        /// Constructor
-        /// </summary>
-        public MessageHandler() {
-        }
-
         /// <summary>
         /// Get the type of the processed message.
         /// </summary>

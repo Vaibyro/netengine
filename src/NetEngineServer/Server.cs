@@ -104,7 +104,7 @@ namespace NetEngineServer {
         /// <summary>
         /// Get or set the maximum number of simultaneous connections.
         /// </summary>
-        public int MaxConnections { get; set; } = 0;
+        public int MaxConnections { get; set; };
 
         /// <summary>
         /// Get the current frequency.
