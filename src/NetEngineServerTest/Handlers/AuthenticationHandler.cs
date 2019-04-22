@@ -28,7 +28,7 @@ namespace NetEngineServerTest.Handlers {
         }
 
         protected virtual bool VerifyCredentials(AuthenticationMessage message) {
-            return false; //todo
+            return true; //todo
         }
 
         protected virtual void OnBadAuthentication(AuthenticationMessage message) {

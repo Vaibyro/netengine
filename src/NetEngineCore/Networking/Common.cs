@@ -155,19 +155,25 @@ namespace NetEngineCore.Networking {
                 return false;
             }
 
+            Console.WriteLine("bonjour");
+            foreach (byte b in header) {
+                Console.Write(b + " ");
+            }
+            Console.WriteLine();
+            
             // convert to int
             int size = Utils.BytesToIntBigEndian(header);
 
             // protect against allocation attacks. an attacker might send
             // multiple fake '2GB header' packets in a row, causing the server
             // to allocate multiple 2GB byte arrays and run out of memory.
-            // (size <= maxMessageSize) {
+            if (size <= maxMessageSize) {
                 // read exactly 'size' bytes for content (blocking)
                 content = new byte[size];
 
                 
                 return stream.ReadExactly(content, size);
-            //}
+            }
 
             logger.Warn("ReadMessageBlocking: possible allocation attack with a header of: " + size + " bytes.");
             return false;
