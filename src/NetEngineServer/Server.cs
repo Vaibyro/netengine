@@ -477,13 +477,13 @@ namespace NetEngineServer {
             // Try removing clients from list
             if (_clients.TryGetValue(packet.ConnectionId, out client)) {
                 _clients.Remove(packet.ConnectionId);
-                Console.WriteLine($"Client {client.ToString()} disconnected.");
+                //Console.WriteLine($"Client {client.ToString()} disconnected.");
             }
 
             // Try removing clients from waiting list
             if (_authWaitList.TryGetValue(packet.ConnectionId.ToString(), out client)) {
                 _authWaitList.Remove(packet.ConnectionId.ToString());
-                Console.WriteLine($"Client not authenticated {client.ToString()} disconnected.");
+                //Console.WriteLine($"Client not authenticated {client.ToString()} disconnected.");
             }
 
             // If client has been removed (normal disconnection), fire the event

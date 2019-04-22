@@ -3,50 +3,63 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 
 namespace NetEngineCore.Networking {
     public class Server : Common {
+        
+        #region Properties
+
+        /// <summary>
+        /// Check if the server is running.
+        /// </summary>
+        public bool Active => _listenerThread != null && _listenerThread.IsAlive;
+        
+        #endregion
+        
+        
+        #region Private members
+        
         private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
-
-        // listener
-        public TcpListener listener;
-        Thread listenerThread;
-
-        // class with all the client's data. let's call it Token for consistency
-        // with the async socket methods.
-        class ClientToken {
-            public TcpClient client;
-
-            // send queue
-            // SafeQueue is twice as fast as ConcurrentQueue, see SafeQueue.cs!
-            public SafeQueue<byte[]> sendQueue = new SafeQueue<byte[]>();
-
-            // ManualResetEvent to wake up the send thread. better than Thread.Sleep
-            // -> call Set() if everything was sent
-            // -> call Reset() if there is something to send again
-            // -> call WaitOne() to block until Reset was called
-            public ManualResetEvent sendPending = new ManualResetEvent(false);
-
-            public ClientToken(TcpClient client) {
-                this.client = client;
-            }
-        }
-
+        private Thread _listenerThread;
+        
+        // SSL
+        private X509Certificate2 _sslCertificate;
+        private X509Certificate2Collection _SslCertificateCollection;  
+        
         // clients with <connectionId, ClientData>
-        ConcurrentDictionary<int, ClientToken> clients = new ConcurrentDictionary<int, ClientToken>();
-
+        private ConcurrentDictionary<int, ClientToken> _clients = new ConcurrentDictionary<int, ClientToken>();
+         
         // connectionId counter
         // (right now we only use it from one listener thread, but we might have
         //  multiple threads later in case of WebSockets etc.)
         // -> static so that another server instance doesn't start at 0 again.
-        static int counter = 0;
+        private static int _counter;
+        
+        #endregion
+        
+        
+        // listener
+        public TcpListener listener;
+        
+
+        #region Constructors
+        
+       
+        
+        #endregion
+        
+        
+
+       
+
 
         // public next id function in case someone needs to reserve an id
         // (e.g. if hostMode should always have 0 connection and external
         //  connections should start at 1, etc.)
         public static int NextConnectionId() {
-            int id = Interlocked.Increment(ref counter);
+            int id = Interlocked.Increment(ref _counter);
 
             // it's very unlikely that we reach the uint limit of 2 billion.
             // even with 1 new connection per second, this would take 68 years.
@@ -61,8 +74,7 @@ namespace NetEngineCore.Networking {
             return id;
         }
 
-        // check if the server is running
-        public bool Active => listenerThread != null && listenerThread.IsAlive;
+        
 
         // the listener thread's listen function
         // note: no maxConnections parameter. high level API should handle that.
@@ -91,7 +103,7 @@ namespace NetEngineCore.Networking {
 
                     // add to dict immediately
                     ClientToken token = new ClientToken(client);
-                    clients[connectionId] = token;
+                    _clients[connectionId] = token;
 
                     // spawn a send thread for each client
                     Thread sendThread = new Thread(() => {
@@ -118,10 +130,10 @@ namespace NetEngineCore.Networking {
                         // are silent
                         try {
                             // run the receive loop
-                            ReceiveLoop(connectionId, client, receiveQueue, MaxMessageSize);
+                            ReceiveLoop(connectionId, client, ReceiveQueue, MaxMessageSize);
 
                             // remove client from clients dict afterwards
-                            clients.TryRemove(connectionId, out ClientToken _);
+                            _clients.TryRemove(connectionId, out ClientToken _);
 
                             // sendthread might be waiting on ManualResetEvent,
                             // so let's make sure to end it if the connection
@@ -163,22 +175,24 @@ namespace NetEngineCore.Networking {
             // doesn't receive data from last time and gets out of sync.
             // -> calling this in Stop isn't smart because the caller may
             //    still want to process all the latest messages afterwards
-            receiveQueue = new ConcurrentQueue<Packet>();
+            ReceiveQueue = new ConcurrentQueue<Packet>();
 
             // start the listener thread
             // (on low priority. if main thread is too busy then there is not
             //  much value in accepting even more clients)
             logger.Info("Server: Start port=" + port);
-            listenerThread = new Thread(() => { Listen(port); });
-            listenerThread.IsBackground = true;
-            listenerThread.Priority = ThreadPriority.BelowNormal;
-            listenerThread.Start();
+            _listenerThread = new Thread(() => { Listen(port); });
+            _listenerThread.IsBackground = true;
+            _listenerThread.Priority = ThreadPriority.BelowNormal;
+            _listenerThread.Start();
             return true;
         }
 
         public void Stop() {
             // only if started
-            if (!Active) return;
+            if (!Active) {
+                return;
+            }
 
             logger.Info("Server: stopping...");
 
@@ -191,11 +205,11 @@ namespace NetEngineCore.Networking {
             // kill listener thread at all costs. only way to guarantee that
             // .Active is immediately false after Stop.
             // -> calling .Join would sometimes wait forever
-            listenerThread?.Interrupt();
-            listenerThread = null;
+            _listenerThread?.Interrupt();
+            _listenerThread = null;
 
             // close all client connections
-            foreach (KeyValuePair<int, ClientToken> kvp in clients) {
+            foreach (KeyValuePair<int, ClientToken> kvp in _clients) {
                 TcpClient client = kvp.Value.client;
                 // close the stream if not closed yet. it may have been closed
                 // by a disconnect already, so use try/catch
@@ -208,7 +222,7 @@ namespace NetEngineCore.Networking {
             }
 
             // clear clients list
-            clients.Clear();
+            _clients.Clear();
         }
 
         // send message to client using socket connection.
@@ -217,7 +231,7 @@ namespace NetEngineCore.Networking {
             if (data.Length <= MaxMessageSize) {
                 // find the connection
                 ClientToken token;
-                if (clients.TryGetValue(connectionId, out token)) {
+                if (_clients.TryGetValue(connectionId, out token)) {
                     // add to send queue and return immediately.
                     // calling Send here would be blocking (sometimes for long times
                     // if other side lags or wire was disconnected)
@@ -238,7 +252,7 @@ namespace NetEngineCore.Networking {
         public string GetClientAddress(int connectionId) {
             // find the connection
             ClientToken token;
-            if (clients.TryGetValue(connectionId, out token)) {
+            if (_clients.TryGetValue(connectionId, out token)) {
                 return ((IPEndPoint) token.client.Client.RemoteEndPoint).Address.ToString();
             }
 
@@ -252,14 +266,14 @@ namespace NetEngineCore.Networking {
         /// <returns></returns>
         public bool IsClientConnected(int id)
         {
-            return clients.ContainsKey(id);
+            return _clients.ContainsKey(id);
         }
 
         // disconnect (kick) a client
         public bool Disconnect(int connectionId) {
             // find the connection
             ClientToken token;
-            if (clients.TryGetValue(connectionId, out token)) {
+            if (_clients.TryGetValue(connectionId, out token)) {
                 // just close it. client thread will take care of the rest.
                 token.client.Close();
                 logger.Info("Server.Disconnect connectionId:" + connectionId);
