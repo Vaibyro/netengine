@@ -63,7 +63,6 @@
     <Compile Include="ClientPool.cs" />
     <Compile Include="Filtering\AuthenticationFilter.cs" />
     <Compile Include="Filtering\IFilter.cs" />
-    <Compile Include="SafeCacheDictionary.cs" />
     <Compile Include="Client.cs" />
     <Compile Include="Messaging\Dispatching\ServerMessageDispatcher.cs" />
     <Compile Include="Messaging\Handling\ServerMessageHandler.cs" />

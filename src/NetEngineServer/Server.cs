@@ -10,6 +10,9 @@ using System.Runtime.Caching;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using NetEngineCore;
+using NetEngineCore.Messaging.Dispatching;
+using NetEngineServer.Caching;
 using NetEngineServer.Filtering;
 using NetEngineServer.Messaging.Dispatching;
 using NetEngineServer.Utils;
@@ -18,7 +21,7 @@ namespace NetEngineServer {
     /// <summary>
     /// GameServer class.
     /// </summary>
-    public class Server {
+    public class Server : INetworkSystem {
         #region Private members
 
         // Networking server
@@ -37,8 +40,8 @@ namespace NetEngineServer {
         // Clients
         private ClientPool _clients = new ClientPool(); // Client pool
 
-        private SafeCacheDictionary<Client>
-            _authWaitList = new SafeCacheDictionary<Client>(); // Not authenticated client pool
+        private Cache<int, Client>
+            _authWaitList = new Cache<int, Client>(); // Not authenticated client pool
 
         // Built-in filters
         private AuthenticationFilter _authenticationFilter = new AuthenticationFilter();
@@ -147,7 +150,7 @@ namespace NetEngineServer {
         /// <summary>
         /// Get the dispatcher.
         /// </summary>
-        public ServerMessageDispatcher Dispatcher { get; }
+        public IMessageDispatcher Dispatcher { get; }
 
         /// <summary>
         /// Get or set the maximum amount of clients. todo
@@ -193,7 +196,7 @@ namespace NetEngineServer {
             Port = port;
             Dispatcher = new ServerMessageDispatcher(this);
             _middlewares = new List<IFilter>();
-            _authWaitList.OnCacheRemove = OnAuthWaitingListAutoRemove;
+            _authWaitList.OnRemove += OnAuthWaitingListAutoRemove;
             NetworkingServer = new NetEngineCore.Networking.Server();
             AttachFilter(_authenticationFilter);
         }
@@ -215,11 +218,11 @@ namespace NetEngineServer {
             // Fire event "on server starting..."
             Starting(this, new EventArgs());
 
-            // SSL
+            // Load the SSL certificate into the networking server
             if (UseSsl) {
                 NetworkingServer.SslCertificate = new X509Certificate2(CertificateFile);
             }
-            
+
             // Start the networking server
             NetworkingServer.Start(Port);
 
@@ -230,43 +233,12 @@ namespace NetEngineServer {
             // Fire event "on server ready..."
             Ready(this, new EventArgs());
 
-            var thread = new Thread(() => {
-                while (_shouldRun) {
-                    // Cycle (create a watch to calculate elapsed time)
-                    var watch = System.Diagnostics.Stopwatch.StartNew();
-
-                    // Consume all pending messages
-                    while (NetworkingServer.GetNextMessage(out Packet packet)) {
-                        // Treat message
-                        switch (packet.PacketType) {
-                            case PacketType.Connection:
-                                OnConnection(packet);
-                                break;
-                            case PacketType.Data:
-                                OnData(packet);
-                                break;
-                            case PacketType.Disconnection:
-                                OnDisconnection(packet);
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-
-                    watch.Stop();
-
-                    // Get the current real frequency
-                    CurrentFrequency = 1000 / (int) MathUtils.Clamp(watch.ElapsedMilliseconds, (1000 / MaxFrequency));
-
-                    // Sleep
-                    Thread.Sleep((1000 / MaxFrequency) -
-                                 (int) MathUtils.Clamp(watch.ElapsedMilliseconds, 0, (1000 / MaxFrequency)));
-                }
-            });
+            // Create the main loop
+            var thread = new Thread(Loop);
             thread.Start();
         }
 
-        /// <summary>
+       /// <summary>
         /// Get one client.
         /// </summary>
         /// <param name="id"></param>
@@ -281,7 +253,7 @@ namespace NetEngineServer {
         /// <param name="id"></param>
         /// <returns></returns>
         public Client GetWaitingListClient(int id) {
-            return _authWaitList[id.ToString()];
+            return _authWaitList[id];
         }
 
         /// <summary>
@@ -299,8 +271,8 @@ namespace NetEngineServer {
         /// <param name="id"></param>
         /// <param name="identifier"></param>
         public void AuthenticateClient(int id, string identifier) {
-            var client = _authWaitList[id.ToString()];
-            _authWaitList.Remove(id.ToString());
+            var client = _authWaitList[id];
+            _authWaitList.Remove(id);
             client.Identifier = identifier;
             client.Authenticated = true;
             _clients.Add(client);
@@ -450,7 +422,7 @@ namespace NetEngineServer {
         /// <param name="id"></param>
         /// <returns></returns>
         public bool IsAuthenticated(int id) {
-            return _authWaitList.ContainsKey(id.ToString());
+            return _authWaitList.ContainsKey(id);
         }
 
         #endregion
@@ -458,8 +430,42 @@ namespace NetEngineServer {
 
         #region Private methods
 
-        private void OnAuthWaitingListAutoRemove(CacheEntryRemovedArguments args) {
-            var client = (Client) args.CacheItem.Value;
+        private void Loop() {
+            while (_shouldRun) {
+                // Cycle (create a watch to calculate elapsed time)
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+
+                // Consume all pending messages
+                while (NetworkingServer.GetNextMessage(out Packet packet)) {
+                    // Treat message
+                    switch (packet.PacketType) {
+                        case PacketType.Connection:
+                            OnConnection(packet);
+                            break;
+                        case PacketType.Data:
+                            OnData(packet);
+                            break;
+                        case PacketType.Disconnection:
+                            OnDisconnection(packet);
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+
+                watch.Stop();
+
+                // Get the current real frequency
+                CurrentFrequency = 1000 / (int) MathUtils.Clamp(watch.ElapsedMilliseconds, (1000 / MaxFrequency));
+
+                // Sleep
+                Thread.Sleep((1000 / MaxFrequency) -
+                             (int) MathUtils.Clamp(watch.ElapsedMilliseconds, 0, (1000 / MaxFrequency)));
+            }
+        }
+        
+        private void OnAuthWaitingListAutoRemove(object sender, CacheEventArgs args) {
+            var client = (Client) args.Object;
             ForceDisconnectClient(client.Id);
             ClientEvicted(this, new ClientEventArgs(client));
         }
@@ -473,7 +479,7 @@ namespace NetEngineServer {
                 NetworkingServer.GetClientAddress(packet.ConnectionId), this);
 
             // Add the client to the auth waiting list
-            _authWaitList.Add(packet.ConnectionId.ToString(), client, TimeSpan.FromSeconds(4));
+            _authWaitList.AddOrUpdate(packet.ConnectionId, client, 4);
 
             ClientConnected(this, new ClientEventArgs(client));
         }
@@ -484,7 +490,7 @@ namespace NetEngineServer {
         /// <param name="packet"></param>
         private void OnDisconnection(Packet packet) {
             Client client;
-            
+
             // Try removing clients from list
             if (_clients.TryGetValue(packet.ConnectionId, out client)) {
                 _clients.Remove(packet.ConnectionId);
@@ -492,8 +498,8 @@ namespace NetEngineServer {
             }
 
             // Try removing clients from waiting list
-            if (_authWaitList.TryGetValue(packet.ConnectionId.ToString(), out client)) {
-                _authWaitList.Remove(packet.ConnectionId.ToString());
+            if (_authWaitList.TryGet(packet.ConnectionId, out client)) {
+                _authWaitList.Remove(packet.ConnectionId);
                 //Console.WriteLine($"Client not authenticated {client.ToString()} disconnected.");
             }
 

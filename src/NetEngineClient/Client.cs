@@ -6,15 +6,35 @@ using System.Threading;
 using System.Threading.Tasks;
 using MessagePack;
 using NetEngineClient.Messaging.Dispatching;
+using NetEngineCore;
+using NetEngineCore.Messaging.Dispatching;
 
 namespace NetEngineClient {
     /// <summary>
     /// GameClient class.
     /// </summary>
-    public class Client {
+    public class Client : INetworkSystem {
+        #region Private members
+
         private bool _shouldRun = true;
         private readonly NetEngineCore.Networking.Client _client = new NetEngineCore.Networking.Client();
         private readonly ClientMessageDispatcher _dispatcher;
+
+        #endregion
+
+
+        #region Events
+
+        public event EventHandler Ready = delegate { };
+        public event EventHandler Starting = delegate { };
+        public event EventHandler Stopped = delegate { };
+        public event EventHandler Stopping = delegate { };
+        public event EventHandler ConnectedToServer = delegate { };
+
+        #endregion
+
+
+        #region Properties
 
         /// <summary>
         /// Get the address of the server.
@@ -24,12 +44,17 @@ namespace NetEngineClient {
         /// <summary>
         /// Get the port of the server.
         /// </summary>
-        public int ServerPort { get; }
+        public int Port { get; }
 
         /// <summary>
         /// Client connection to server timeout.
         /// </summary>
         public int Timeout { get; set; } = 10;
+
+        /// <summary>
+        /// Gets if the client is running.
+        /// </summary>
+        public bool Running { get; private set; }
 
         /// <summary>
         /// Get if the client if currently connected to the server.
@@ -48,7 +73,7 @@ namespace NetEngineClient {
         /// Get or set the certificate path. todo
         /// </summary>
         public string CertificateFile { get; set; }
-        
+
         /// <summary>
         /// Error logger.
         /// </summary>
@@ -64,60 +89,95 @@ namespace NetEngineClient {
         /// </summary>
         public Action<string> LogWarning { get; set; } = Console.WriteLine;
 
-        public ClientMessageDispatcher Dispatcher => _dispatcher;
+        /// <summary>
+        /// Gets the dispatcher.
+        /// </summary>
+        public IMessageDispatcher Dispatcher => _dispatcher;
+
+        #endregion
+
+
+        #region Constructors
 
         /// <summary>
         /// Constructor.
         /// </summary>
         /// <param name="serverAddress"></param>
-        /// <param name="serverPort"></param>
-        public Client(string serverAddress, int serverPort) {
+        /// <param name="port"></param>
+        public Client(string serverAddress, int port) {
             ServerAddress = serverAddress;
-            ServerPort = serverPort;
+            Port = port;
             _dispatcher = new ClientMessageDispatcher(this);
         }
+
+        #endregion
+
+
+        #region Public methods
 
         /// <summary>
         /// Run the client.
         /// </summary>
         /// <exception cref="Exception"></exception>
         public void Run() {
-            LogInfo("Launching client...");
-            
+            Starting(this, EventArgs.Empty);
+
             // SSL
             if (UseSsl) {
                 _client.SslCertificate = new X509Certificate2(CertificateFile);
             }
-            
-            CreateConnection();
-            
+
+            // Connect to the server
+            _client.Connect(ServerAddress, Port);
+            const int delayRetry = 15;
+            var time = 0;
+            while (!_client.Connected) {
+                if (time < Timeout * 1000) {
+                    //logger.Info("Waiting for connection...");
+                    Thread.Sleep(delayRetry);
+                } else {
+                    //logger.Info("timeout reached. aborting.");
+                    throw new Exception("Timeout reached.");
+                }
+
+                time += delayRetry;
+            }
+
+            ConnectedToServer(this, EventArgs.Empty);
+            Running = true;
+
             LogInfo("Connected to server.");
             LogInfo("Trying to authenticate...");
 
             // Authenticate the client.
             SendAuthentication("azerty", "pass123");
-            
+
             LogInfo("Authentication packet sent.");
-
-            var thread = new Thread(() => {
-                while (_shouldRun) {
-                    if (!_client.Connected) {
-                        // Maybe the server is suddenly down...
-                        throw new Exception("Connection with the server lost");
-                    }
-
-                    // get new messages from queue
-                    while (_client.GetNextMessage(out Packet packet)) {
-                        if (packet.PacketType == PacketType.Data) {
-                            ProcessPacketData(packet);
-                        }
-                    }
-
-                    // Todo: implement the final clock rate
-                    Thread.Sleep(20);
-                }
-            });
+            Ready(this, EventArgs.Empty);
+            
+            // Start the main loop
+            var thread = new Thread(Loop);
             thread.Start();
+        }
+
+        /// <summary>
+        /// Stops the client.
+        /// </summary>
+        /// <exception cref="NotImplementedException"></exception>
+        public void Stop() {
+            if (!Running) {
+                throw new Exception("Server not running");
+            }
+
+            // Fire event "on client stopping..."
+            Stopping(this, new EventArgs());
+
+            _shouldRun = false;
+            _client.Disconnect();
+            Running = false;
+
+            // Fire event "on client stopped..."
+            Stopped(this, new EventArgs());
         }
 
         /// <summary>
@@ -155,40 +215,45 @@ namespace NetEngineClient {
             _client.Send(packet.Data);
         }
 
+        #endregion
+
+        
+        #region Private members
+
         /// <summary>
-        /// Disconnect the client from the server.
+        /// Start the main loop.
         /// </summary>
-        public void Disconnect() {
-            _shouldRun = false;
-            _client.Disconnect();
+        /// <exception cref="Exception"></exception>
+        private void Loop() {
+            while (_shouldRun) {
+                if (!_client.Connected) {
+                    // Maybe the server is suddenly down...
+                    throw new Exception("Connection with the server lost");
+                }
+
+                // get new messages from queue
+                while (_client.GetNextMessage(out Packet packet)) {
+                    if (packet.PacketType == PacketType.Data) {
+                        OnData(packet);
+                    }
+                }
+
+                // Todo: implement the final clock rate
+                Thread.Sleep(20);
+            }
         }
 
-        private void ProcessPacketData(Packet packet) {
+        /// <summary>
+        /// When the client receive data.
+        /// </summary>
+        /// <param name="packet"></param>
+        private void OnData(Packet packet) {
             LogInfo($"Server sent message:");
             var message = MessagePackSerializer.Deserialize<Message>(packet.Data);
             message.ConnectionId = packet.ConnectionId;
             _dispatcher.Dispatch(message);
         }
 
-        /// <summary>
-        /// Initiate the connection to the server. // todo: change this, not well implemented
-        /// </summary>
-        /// <exception cref="Exception"></exception>
-        private void CreateConnection() {
-            _client.Connect(ServerAddress, ServerPort);
-            const int delayRetry = 15;
-            var time = 0;
-            while (!_client.Connected) {
-                if (time < Timeout * 1000) {
-                    //logger.Info("Waiting for connection...");
-                    Thread.Sleep(delayRetry);
-                } else {
-                    //logger.Info("timeout reached. aborting.");
-                    throw new Exception("Timeout reached.");
-                }
-
-                time += delayRetry;
-            }
-        }
+        #endregion
     }
 }

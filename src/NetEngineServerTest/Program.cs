@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Net;
 using System.Runtime.Caching;
 using System.Security.Cryptography.X509Certificates;
@@ -44,9 +45,18 @@ namespace NetEngineServerTest {
             Server.Starting += ServerStarting;
             Server.Ready += ServerStarted;
 
-            Server.UseSsl = true;
-            Server.CertificateFile = @"...";
-            
+            // SSL
+            var indexCert = Array.IndexOf(args, "-s");
+            if (indexCert > -1) {
+                if (args[indexCert + 1] != null) {
+                    var certfile = args[indexCert + 1];
+                    Server.UseSsl = true;
+                    Server.CertificateFile = certfile;
+                } else {
+                    Console.WriteLine("Error, cert file not specified in arguments.");   
+                }
+            }
+
             // Run the server
             Server.Run(); 
 
@@ -92,6 +102,11 @@ namespace NetEngineServerTest {
         
         public static void ServerStarting(object sender, EventArgs args) {
             _logger.Info($"Server starting on port {Server.Port}...");
+            if (Server.UseSsl) {
+                _logger.Info($"Using SSL secure connection.");
+            } else {
+                _logger.Info($"Warning: this server is not configured to use SSL secure connection.");
+            }
         }
         
         public static void ServerStarted(object sender, EventArgs args) {

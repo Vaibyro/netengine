@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
@@ -8,8 +9,6 @@ namespace NetEngineServer.Caching {
     
     #region Cache<T> class
 
-    
-    
     /// <inheritdoc />
     /// <summary>
     /// This is a generic cache subsystem based on key/value pairs, where key is generic, too. Key must be unique.
@@ -32,8 +31,20 @@ namespace NetEngineServer.Caching {
         private Dictionary<TKey, Timer> _timers = new Dictionary<TKey, Timer>();
         private ReaderWriterLockSlim _locker = new ReaderWriterLockSlim();
 
+        public IEnumerable<TValue> Values {
+            get {
+                _locker.EnterReadLock();
+                try {
+                    return _cache.Values;
+                } finally {
+                    _locker.ExitReadLock();
+                }
+            }
+        }
+
         #endregion
 
+        
         #region IDisposable implementation & Clear
 
         private bool _disposed = false;
@@ -85,8 +96,18 @@ namespace NetEngineServer.Caching {
             }
         }
 
+        public bool ContainsKey(TKey key) {
+            _locker.EnterReadLock();
+            try {
+                return _cache.ContainsKey(key);
+            } finally {
+                _locker.ExitReadLock();
+            }
+        }
+        
         #endregion
 
+        
         #region CheckTimer
 
         // Checks whether a specific timer already exists and adds a new one, if not 
@@ -117,6 +138,7 @@ namespace NetEngineServer.Caching {
 
         #endregion
 
+        
         #region AddOrUpdate, Get, Remove, Exists, Clear
 
         /// <summary>
@@ -283,6 +305,7 @@ namespace NetEngineServer.Caching {
 
     #endregion
 
+    
     #region Other Cache classes (derived)
 
     /// <summary>

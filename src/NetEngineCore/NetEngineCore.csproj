@@ -73,6 +73,7 @@
     <Compile Include="Networking\SafeQueue.cs" />
     <Compile Include="Networking\Server.cs" />
     <Compile Include="Networking\Utils.cs" />
+    <Compile Include="INetworkSystem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
