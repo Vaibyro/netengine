@@ -136,8 +136,15 @@ namespace NetEngineCore.Networking {
                         // wrap in try-catch, otherwise Thread exceptions
                         // are silent
                         try {
+                            Stream currentStream;
+                            if (UseSsl) {
+                                currentStream = token.SslStream;
+                            } else {
+                                currentStream = client.GetStream();
+                            }
+                            
                             // run the receive loop
-                            ReceiveLoop(connectionId, client, ReceiveQueue, MaxMessageSize, token.SslStream);
+                            ReceiveLoop(connectionId, client, ReceiveQueue, MaxMessageSize, currentStream);
 
                             // remove client from clients dict afterwards
                             _clients.TryRemove(connectionId, out ClientToken _);
