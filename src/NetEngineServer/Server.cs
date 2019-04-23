@@ -436,6 +436,7 @@ namespace NetEngineServer {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
 
                 // Consume all pending messages
+                // todo: use parallel
                 while (NetworkingServer.GetNextMessage(out Packet packet)) {
                     // Treat message
                     switch (packet.PacketType) {
