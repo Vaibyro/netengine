@@ -14,7 +14,7 @@ namespace NetEngineClientTest {
             client.Dispatcher.AttachHandler(typeof(ExampleMessage), new ExampleClientHandler(client));
 
             client.UseSsl = true;
-            client.CertificateFile = @"D:\Utilisateurs\Thomas\Documents\NetEngine\netengine.pfx";
+            client.CertificateFile = @"C:\Users\a021884\Documents\netengine.pfx";
             
             client.Run();
 

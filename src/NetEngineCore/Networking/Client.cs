@@ -61,9 +61,11 @@ namespace NetEngineCore.Networking {
                 // Stream
                 if (UseSsl) {
                     // Here we are performing Ssl authentication
-                    //
-                    //
-                    var stream = new SslStream(client.GetStream(), false, AcceptCertificate);
+                    var stream = new SslStream(
+                        client.GetStream(), 
+                        false, 
+                        new RemoteCertificateValidationCallback(AcceptCertificate), 
+                        null);
 
                     var sslCertificateCollection = new X509Certificate2Collection {
                         SslCertificate
@@ -82,17 +84,18 @@ namespace NetEngineCore.Networking {
                     }
 
                     if (!stream.IsMutuallyAuthenticated) {
-                        //throw new AuthenticationException("Mutual authentication failed");
+                        throw new AuthenticationException("Mutual authentication failed");
                     }
-
 
                     _stream = stream;
                 } else {
-                    _stream = client.GetStream();
+                    _stream = client.GetStream(); // No ssl
                 }
 
                 // start send thread only after connected
-                _sendThread = new Thread(() => { SendLoop(0, client, sendQueue, sendPending, _stream); });
+                _sendThread = new Thread(() => {
+                    SendLoop(0, client, sendQueue, sendPending, _stream);
+                });
                 _sendThread.IsBackground = true;
                 _sendThread.Start();
 
@@ -122,7 +125,10 @@ namespace NetEngineCore.Networking {
             // Connect might have failed. thread might have been closed.
             // let's reset connecting state no matter what.
             _connecting = false;
-
+            
+            // Close the stream
+            _stream.Close();
+            
             // if we got here then we are done. ReceiveLoop cleans up already,
             // but we may never get there if connect fails. so let's clean up
             // here too.

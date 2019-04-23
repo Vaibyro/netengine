@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NetEngineCore.Messaging;
 using NetEngineServer;
+using NetEngineServer.Caching;
 using NetEngineServer.Filtering;
 using NetEngineServerTest.Filters;
 using NetEngineServerTest.Handlers;
@@ -17,6 +18,11 @@ namespace NetEngineServerTest {
     internal class Program {
         private static NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
         public static Server Server;
+
+        public static void Toto(object sender, CacheEventArgs e) {
+            Console.WriteLine("item removed !" + (string)e.Object);
+            Console.WriteLine(((Cache<int, string>) sender).Count);
+        }
         
         public static void Main(string[] args) {
             // Instantiate a server with the port 1337
@@ -39,7 +45,7 @@ namespace NetEngineServerTest {
             Server.Ready += ServerStarted;
 
             Server.UseSsl = true;
-            Server.CertificateFile = @"D:\Utilisateurs\Thomas\Documents\NetEngine\netengine.pfx";
+            Server.CertificateFile = @"...";
             
             // Run the server
             Server.Run(); 

@@ -24,10 +24,9 @@ namespace NetEngineServer {
         }
 
         public void Clear() {
-            lock (Padlock) {
                 _cache.Dispose();
                 _cache = new MemoryCache("CachingProvider");
-            }
+            
         }
 
         public bool Contains(KeyValuePair<string, TValue> item) {

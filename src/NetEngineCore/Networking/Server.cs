@@ -11,47 +11,41 @@ using System.Threading;
 
 namespace NetEngineCore.Networking {
     public class Server : Common {
-        
         #region Properties
 
         /// <summary>
         /// Check if the server is running.
         /// </summary>
         public bool Active => _listenerThread != null && _listenerThread.IsAlive;
-        
+
         #endregion
-        
-        
+
+
         #region Private members
-        
+
         private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
         private Thread _listenerThread;
-        
 
-        
+
         // clients with <connectionId, ClientData>
         private ConcurrentDictionary<int, ClientToken> _clients = new ConcurrentDictionary<int, ClientToken>();
-         
+
         // connectionId counter
         // (right now we only use it from one listener thread, but we might have
         //  multiple threads later in case of WebSockets etc.)
         // -> static so that another server instance doesn't start at 0 again.
         private static int _counter;
-        
+
         #endregion
-        
-        
+
+
         // listener
         public TcpListener listener;
-        
+
 
         #region Constructors
-        
-        #endregion
-        
-        
 
-       
+        #endregion
 
 
         // public next id function in case someone needs to reserve an id
@@ -102,18 +96,13 @@ namespace NetEngineCore.Networking {
                     // add to dict immediately
                     ClientToken token = new ClientToken(client);
                     _clients[connectionId] = token;
-                    
-                    
-                    
+
                     if (UseSsl) {
                         token.SslStream = new SslStream(client.GetStream(), false, AcceptCertificate);
 
-                        Console.WriteLine("SSL in use");
-                        
                         // SSL auth
-                        StartTls(token);
+                        TlsMutualAuthentication(token);
                     }
-                    
 
                     // spawn a send thread for each client
                     Thread sendThread = new Thread(() => {
@@ -148,7 +137,7 @@ namespace NetEngineCore.Networking {
                         // are silent
                         try {
                             // run the receive loop
-                            ReceiveLoop(connectionId, client, ReceiveQueue, MaxMessageSize, client.GetStream());
+                            ReceiveLoop(connectionId, client, ReceiveQueue, MaxMessageSize, token.SslStream);
 
                             // remove client from clients dict afterwards
                             _clients.TryRemove(connectionId, out ClientToken _);
@@ -186,40 +175,34 @@ namespace NetEngineCore.Networking {
         /// </summary>
         /// <param name="client"></param>
         /// <returns></returns>
-        private bool StartTls(ClientToken client)
-        {
-            try
-            {
+        private bool TlsMutualAuthentication(ClientToken client) {
+            try {
                 // the two bools in this should really be contruction paramaters
                 // maybe re-use mutualAuthentication and acceptInvalidCerts ?
                 client.SslStream.AuthenticateAsServer(SslCertificate, true, SslProtocols.Tls12, false);
 
-                if (!client.SslStream.IsEncrypted)
-                {
+                if (!client.SslStream.IsEncrypted) {
                     Console.WriteLine("*** StartTls stream from # not encrypted");
                     return false;
                 }
 
-                if (!client.SslStream.IsAuthenticated)
-                {
+                if (!client.SslStream.IsAuthenticated) {
                     Console.WriteLine("*** StartTls stream from # not authenticated");
                     return false;
                 }
 
-                if (!client.SslStream.IsMutuallyAuthenticated)
-                {
+                if (!client.SslStream.IsMutuallyAuthenticated) {
                     Console.WriteLine("*** StartTls stream from # failed mutual authentication");
                     //client.Dispose();
                     return false;
                 }
-            }
-            catch (IOException ex)
-            {
+            } catch (IOException ex) {
                 // Some type of problem initiating the SSL connection
-                switch (ex.Message)
-                {
+                switch (ex.Message) {
                     case "Authentication failed because the remote party has closed the transport stream.":
-                    case "Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host.":
+                    case
+                        "Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host."
+                        :
                         Console.WriteLine("*** StartTls IOException # closed the connection.");
                         break;
                     case "The handshake failed due to an unexpected packet format.":
@@ -231,16 +214,14 @@ namespace NetEngineCore.Networking {
                 }
 
                 return false;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Console.WriteLine("*** StartTls Exception from # " + Environment.NewLine + ex.ToString());
                 return false;
             }
 
             return true;
         }
-        
+
         // start listening for new connections in a background thread and spawn
         // a new thread for each one.
         public bool Start(int port) {
@@ -342,8 +323,7 @@ namespace NetEngineCore.Networking {
         /// </summary>
         /// <param name="id"></param>
         /// <returns></returns>
-        public bool IsClientConnected(int id)
-        {
+        public bool IsClientConnected(int id) {
             return _clients.ContainsKey(id);
         }
 

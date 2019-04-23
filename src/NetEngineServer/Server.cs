@@ -473,7 +473,7 @@ namespace NetEngineServer {
                 NetworkingServer.GetClientAddress(packet.ConnectionId), this);
 
             // Add the client to the auth waiting list
-            _authWaitList.Add(packet.ConnectionId.ToString(), client, TimeSpan.FromSeconds(3));
+            _authWaitList.Add(packet.ConnectionId.ToString(), client, TimeSpan.FromSeconds(4));
 
             ClientConnected(this, new ClientEventArgs(client));
         }

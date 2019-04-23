@@ -95,7 +95,7 @@ namespace NetEngineClient {
             LogInfo("Trying to authenticate...");
 
             // Authenticate the client.
-            SendAuthentication("testuser", "pass123");
+            SendAuthentication("azerty", "pass123");
             
             LogInfo("Authentication packet sent.");
 

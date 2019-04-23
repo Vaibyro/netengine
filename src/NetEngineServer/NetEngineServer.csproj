@@ -57,6 +57,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Caching\Cache.cs" />
+    <Compile Include="Caching\CacheEventArgs.cs" />
     <Compile Include="ClientEventArgs.cs" />
     <Compile Include="ClientPool.cs" />
     <Compile Include="Filtering\AuthenticationFilter.cs" />

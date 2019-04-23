@@ -117,11 +117,14 @@ namespace NetEngineCore.Networking {
             try {
                 // we might have multiple pending messages. merge into one
                 // packet to avoid TCP overheads and improve performance.
+                
+                Console.WriteLine("Packet to be sent");
+                                
                 int packetSize = 0;
                 for (int i = 0; i < messages.Length; ++i) {
                     packetSize += sizeof(int) + messages[i].Length; // header + content
                 }
-                
+
                 // create the packet
                 byte[] payload = new byte[packetSize];
                 int position = 0;
@@ -134,10 +137,9 @@ namespace NetEngineCore.Networking {
                     Array.Copy(messages[i], 0, payload, position + header.Length, messages[i].Length);
                     position += header.Length + messages[i].Length;
                 }
-               
+                
                 // write the whole thing
                 stream.Write(payload, 0, payload.Length);
-
                 return true;
             } catch (Exception exception) {
                 // log as regular message because servers do shut down sometimes
@@ -154,12 +156,6 @@ namespace NetEngineCore.Networking {
             if (!stream.ReadExactly(header, 4)) {
                 return false;
             }
-
-            Console.WriteLine("bonjour");
-            foreach (byte b in header) {
-                Console.Write(b + " ");
-            }
-            Console.WriteLine();
             
             // convert to int
             int size = Utils.BytesToIntBigEndian(header);
