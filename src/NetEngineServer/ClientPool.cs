@@ -26,16 +26,18 @@ namespace NetEngineServer {
         /// <param name="client"></param>
         /// <exception cref="Exception"></exception>
         public void Add(Client client) {
-            if (client.Identifier == null) {
-                if (GenerateIdentifier) {
-                    client.Identifier = Guid.NewGuid().ToString();
-                } else {
-                    throw new Exception("Client has no identifier");
+            lock (Lock) {
+                if (client.Identifier == null) {
+                    if (GenerateIdentifier) {
+                        client.Identifier = Guid.NewGuid().ToString();
+                    } else {
+                        throw new Exception("Client has no identifier");
+                    }
                 }
-            }
 
-            _clientsId.TryAdd(client.Id, client);
-            _clientsIdentifier.TryAdd(client.Identifier, client);
+                _clientsId.TryAdd(client.Id, client);
+                _clientsIdentifier.TryAdd(client.Identifier, client);
+            }
         }
 
         /// <summary>
@@ -44,15 +46,17 @@ namespace NetEngineServer {
         /// <param name="id"></param>
         /// <exception cref="Exception"></exception>
         public void Remove(int id) {
-            var a = _clientsId.TryRemove(id, out var c);
-            if (!a)
-                throw new Exception("Cannot remove from id");
-            var b = _clientsIdentifier.TryRemove(c.Identifier, out _);
-            if (b) return;
+            lock (Lock) {
+                var a = _clientsId.TryRemove(id, out var c);
+                if (!a)
+                    throw new Exception("Cannot remove from id");
+                var b = _clientsIdentifier.TryRemove(c.Identifier, out _);
+                if (b) return;
 
-            // Only to revert
-            _clientsId.GetOrAdd(c.Id, c);
-            throw new Exception("Cannot remove from identifier");
+                // Only to revert
+                _clientsId.GetOrAdd(c.Id, c);
+                throw new Exception("Cannot remove from identifier"); 
+            }
         }
 
 
@@ -62,15 +66,17 @@ namespace NetEngineServer {
         /// <param name="identifier"></param>
         /// <exception cref="Exception"></exception>
         public void Remove(string identifier) {
-            var a = _clientsIdentifier.TryRemove(identifier, out var c);
-            if (!a)
-                throw new Exception("Cannot remove from id");
-            var b = _clientsId.TryRemove(c.Id, out _);
-            if (b) return;
+            lock (Lock) {
+                var a = _clientsIdentifier.TryRemove(identifier, out var c);
+                if (!a)
+                    throw new Exception("Cannot remove from id");
+                var b = _clientsId.TryRemove(c.Id, out _);
+                if (b) return;
 
-            // Only to revert
-            _clientsId.GetOrAdd(c.Id, c);
-            throw new Exception("Cannot remove from identifier");
+                // Only to revert
+                _clientsId.GetOrAdd(c.Id, c);
+                throw new Exception("Cannot remove from identifier");
+            }
         }
 
         /// <summary>
@@ -80,11 +86,13 @@ namespace NetEngineServer {
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
         public Client Get(int id) {
-            if (!_clientsId.TryGetValue(id, out var val)) {
-                throw new Exception("Cannot retrieve value");
-            }
+            lock (Lock) {
+                if (!_clientsId.TryGetValue(id, out var val)) {
+                    throw new Exception("Cannot retrieve value");
+                }
 
-            return val;
+                return val;
+            }
         }
 
         /// <summary>
@@ -94,33 +102,22 @@ namespace NetEngineServer {
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
         public Client Get(string identifier) {
-            if (!_clientsIdentifier.TryGetValue(identifier, out var val)) {
-                throw new Exception("Cannot retrieve value");
-            }
+            lock (Lock) {
+                if (!_clientsIdentifier.TryGetValue(identifier, out var val)) {
+                    throw new Exception("Cannot retrieve value");
+                }
 
-            return val;
+                return val;
+            }            
         }
 
         public Client this[string key] {
-            get {
-                if (_clientsIdentifier.TryGetValue(key, out Client client)) {
-                    return client;
-                }
-
-                throw new Exception("Unable to get client.");
-            }
+            get => Get(key);
             set => _clientsIdentifier[key] = value;
         }
 
         public Client this[int key] {
-            get {
-                if (_clientsId.TryGetValue(key, out Client client)) {
-                    return client;
-                }
-
-                throw new Exception("Unable to get client.");
-            }
-
+            get => Get(key);
             set => _clientsId[key] = value;
         }
 
@@ -142,24 +139,40 @@ namespace NetEngineServer {
             return _clientsIdentifier.ContainsKey(identifier);
         }
 
+        /// <summary>
+        /// Tries to get a value from the client pool.
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="client"></param>
+        /// <returns></returns>
         public bool TryGetValue(int id, out Client client) {
-            if (!Contains(id)) {
-                client = null;
-                return false;
-            }
+            lock (Lock) {
+                if (!Contains(id)) {
+                    client = null;
+                    return false;
+                }
 
-            client = Get(id);
-            return true;
+                client = Get(id);
+                return true;
+            }
         }
         
+        /// <summary>
+        /// Tries to get a value from the client pool.
+        /// </summary>
+        /// <param name="identifier"></param>
+        /// <param name="client"></param>
+        /// <returns></returns>
         public bool TryGetValue(string identifier, out Client client) {
-            if (!Contains(identifier)) {
-                client = null;
-                return false;
-            }
+            lock (Lock) {
+                if (!Contains(identifier)) {
+                    client = null;
+                    return false;
+                }
 
-            client = Get(identifier);
-            return true;
+                client = Get(identifier);
+                return true;
+            }
         }
         
         /// <summary>

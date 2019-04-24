@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace NetEngineCore.Messaging.Handling {
     public interface IMessageHandler {
-        void Handle(Message message);
+        void Handle(IMessage message);
         Type GetMessageType();
     }
 }

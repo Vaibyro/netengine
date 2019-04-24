@@ -18,7 +18,7 @@ namespace NetEngineCore.Networking {
         // -> call WaitOne() to block until Reset was called
         public ManualResetEvent sendPending = new ManualResetEvent(false);
         
-        public SslStream SslStream { get; set; }
+        public SslStream SslStream { get; set;  }
         
         public ClientToken(TcpClient client) {
             Client = client;

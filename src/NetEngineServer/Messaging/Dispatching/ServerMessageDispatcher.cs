@@ -31,7 +31,7 @@ namespace NetEngineServer.Messaging.Dispatching {
             _handlers.Clear();
         }
 
-        public void Dispatch(Message message) {
+        public void Dispatch(IMessage message) {
             if (_handlers.TryGetValue(message.GetType(), out IMessageHandler handler)) {
                 handler.Handle(message);
             } else {

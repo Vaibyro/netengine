@@ -12,6 +12,6 @@ namespace NetEngineCore.Messaging.Dispatching {
         IEnumerable<IMessageHandler> GetHandlers();
         void AttachHandler(Type messageType, IMessageHandler handler);
         void DetachAllHandlers();
-        void Dispatch(Message message);
+        void Dispatch(IMessage message);
     }
 }

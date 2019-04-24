@@ -6,7 +6,7 @@ namespace NetEngineServer.Filtering {
     /// </summary>
     public class AuthenticationFilter : IFilter {
         public bool Enable { get; set; } = true;
-        public bool Filter(Server server, Message message) {
+        public bool Filter(Server server, IMessage message) {
             var block = (server.UseAuthentication && !(message is AuthenticationMessage) &&
                           server.IsAuthenticated(message.ConnectionId));
 

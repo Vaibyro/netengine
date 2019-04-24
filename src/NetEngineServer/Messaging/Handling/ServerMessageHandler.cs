@@ -3,7 +3,7 @@ using NetEngineCore.Messaging;
 using NetEngineCore.Messaging.Handling;
 
 namespace NetEngineServer.Messaging.Handling {
-    public abstract class ServerMessageHandler<T> : MessageHandler<T> where T : Message {
+    public abstract class ServerMessageHandler<T> : MessageHandler<T> where T : IMessage {
         protected readonly Server Server;
         
         /// <summary>
@@ -24,7 +24,7 @@ namespace NetEngineServer.Messaging.Handling {
         /// Handle the message.
         /// </summary>
         /// <param name="message"></param>
-        public override void Handle(Message message) {
+        public override void Handle(IMessage message) {
             // Otherwise, it is okay to process the message
             ProcessMessage((T) message);
         }

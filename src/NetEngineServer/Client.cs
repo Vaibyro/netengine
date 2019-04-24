@@ -53,7 +53,7 @@ namespace NetEngineServer {
             Send(packet.Data);
         }
         
-        public void Send(Message message) {
+        public void Send(IMessage message) {
             var binaryMessage = MessagePack.MessagePackSerializer.Serialize(message);
             Send(binaryMessage);
         }

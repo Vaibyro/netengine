@@ -105,7 +105,7 @@ namespace NetEngineCore.Networking {
                     }
 
                     // spawn a send thread for each client
-                    Thread sendThread = new Thread(() => {
+                    var sendThread = new Thread(() => {
                         // wrap in try-catch, otherwise Thread exceptions
                         // are silent
                         try {
@@ -132,7 +132,7 @@ namespace NetEngineCore.Networking {
                     sendThread.Start();
 
                     // spawn a receive thread for each client
-                    Thread receiveThread = new Thread(() => {
+                    var receiveThread = new Thread(() => {
                         // wrap in try-catch, otherwise Thread exceptions
                         // are silent
                         try {

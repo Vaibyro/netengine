@@ -57,7 +57,7 @@ namespace NetEngineServer.Caching {
         /// </summary>
         public int Count {
             get {
-                if (_disposed) return default;
+                if (_disposed) return default(int);
                 
                 _locker.EnterReadLock();
                 try {

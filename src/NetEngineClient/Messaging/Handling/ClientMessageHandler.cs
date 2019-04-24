@@ -2,7 +2,7 @@
 using NetEngineCore.Messaging.Handling;
 
 namespace NetEngineClient.Messaging.Handling {
-    public abstract class ClientMessageHandler<T> : MessageHandler<T> where T : Message {
+    public abstract class ClientMessageHandler<T> : MessageHandler<T> where T : class, IMessage {
         protected Client Client;
         
         /// <summary>
@@ -23,7 +23,7 @@ namespace NetEngineClient.Messaging.Handling {
         /// Handle the message.
         /// </summary>
         /// <param name="message"></param>
-        public override void Handle(Message message) {
+        public override void Handle(IMessage message) {
             ProcessMessage(message as T);
         }
     }

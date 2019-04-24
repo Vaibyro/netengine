@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetEngineClientTest", "NetE
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetEngineServerTest", "NetEngineServerTest\NetEngineServerTest.csproj", "{DE9CF7C7-DEAA-45FE-BAAB-F02BF28F94A7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetEngineBench", "NetEngineBench\NetEngineBench.csproj", "{B85DA6E1-949B-49AC-B2A5-A536DA9DAF15}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{DE9CF7C7-DEAA-45FE-BAAB-F02BF28F94A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE9CF7C7-DEAA-45FE-BAAB-F02BF28F94A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DE9CF7C7-DEAA-45FE-BAAB-F02BF28F94A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B85DA6E1-949B-49AC-B2A5-A536DA9DAF15}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B85DA6E1-949B-49AC-B2A5-A536DA9DAF15}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B85DA6E1-949B-49AC-B2A5-A536DA9DAF15}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B85DA6E1-949B-49AC-B2A5-A536DA9DAF15}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

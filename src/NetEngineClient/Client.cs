@@ -200,7 +200,7 @@ namespace NetEngineClient {
         /// Send a message to the server.
         /// </summary>
         /// <param name="message"></param>
-        public void Send(Message message) {
+        public void Send(IMessage message) {
             var binaryMessage = MessagePackSerializer.Serialize(message);
             _client.Send(binaryMessage);
         }
@@ -255,7 +255,7 @@ namespace NetEngineClient {
         /// <param name="packet"></param>
         private void OnData(Packet packet) {
             LogInfo($"Server sent message:");
-            var message = MessagePackSerializer.Deserialize<Message>(packet.Data);
+            var message = MessagePackSerializer.Deserialize<IMessage>(packet.Data);
             message.ConnectionId = packet.ConnectionId;
             _dispatcher.Dispatch(message);
         }

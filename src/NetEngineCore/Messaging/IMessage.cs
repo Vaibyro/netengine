@@ -6,10 +6,10 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace NetEngineCore.Messaging {
-    [MessagePack.Union(0, typeof(ExampleMessage))]
-    [MessagePack.Union(1, typeof(AuthenticationMessage))]
-    public abstract class Message {
+    [MessagePack.Union(-2, typeof(ExampleMessage))]
+    [MessagePack.Union(-1, typeof(AuthenticationMessage))]
+    public interface IMessage {
         [IgnoreMember]
-        public int ConnectionId { get; set; }
+        int ConnectionId { get; set; }
     }
 }

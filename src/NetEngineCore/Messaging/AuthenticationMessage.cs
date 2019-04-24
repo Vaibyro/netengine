@@ -7,11 +7,14 @@ using System.Threading.Tasks;
 
 namespace NetEngineCore.Messaging {
     [MessagePackObject]
-    public class AuthenticationMessage : Message {
+    public class AuthenticationMessage : IMessage {
         [Key(0)]
         public string Username { get; set; }
 
         [Key(1)]
         public string Password { get; set; }
+
+        [IgnoreMember]
+        public int ConnectionId { get; set; }
     }
 }

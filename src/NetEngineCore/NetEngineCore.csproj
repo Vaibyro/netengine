@@ -63,7 +63,7 @@
     <Compile Include="Messaging\Handling\MessageHandler.cs" />
     <Compile Include="Messaging\ExampleMessage.cs" />
     <Compile Include="Messaging\AuthenticationMessage.cs" />
-    <Compile Include="Messaging\Message.cs" />
+    <Compile Include="Messaging\IMessage.cs" />
     <Compile Include="Networking\Client.cs" />
     <Compile Include="Networking\ClientToken.cs" />
     <Compile Include="Networking\Common.cs" />

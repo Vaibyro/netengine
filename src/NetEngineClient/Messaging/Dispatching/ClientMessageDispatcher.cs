@@ -7,6 +7,7 @@ using NetEngineCore.Messaging;
 using NetEngineCore.Messaging.Dispatching;
 using NetEngineCore.Messaging.Handling;
 using NetEngineCore.Networking;
+using IMessage = NetEngineCore.Messaging.IMessage;
 
 namespace NetEngineClient.Messaging.Dispatching {
     public class ClientMessageDispatcher : IMessageDispatcher {
@@ -33,7 +34,7 @@ namespace NetEngineClient.Messaging.Dispatching {
             _handlers.Clear();
         }
 
-        public void Dispatch(Message message) {
+        public void Dispatch(IMessage message) {
             if (_handlers.TryGetValue(message.GetType(), out IMessageHandler handler)) {
                 handler.Handle(message);
             } else {

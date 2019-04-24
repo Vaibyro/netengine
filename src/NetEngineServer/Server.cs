@@ -181,12 +181,19 @@ namespace NetEngineServer {
         public delegate void ClientEventHandler(object sender, ClientEventArgs e);
 
         public event EventHandler Ready = delegate { };
+        
         public event EventHandler Starting = delegate { };
+        
         public event EventHandler Stopped = delegate { };
+        
         public event EventHandler Stopping = delegate { };
+        
         public event ClientEventHandler ClientConnected = delegate { };
+        
         public event ClientEventHandler ClientDisconnected = delegate { };
+        
         public event ClientEventHandler ClientAuthenticated = delegate { };
+        
         public event ClientEventHandler ClientEvicted = delegate { };
 
         #endregion
@@ -311,7 +318,7 @@ namespace NetEngineServer {
         /// Broadcast a message to all clients.
         /// </summary>
         /// <param name="message"></param>
-        public void Broadcast(Message message) {
+        public void Broadcast(IMessage message) {
             foreach (Client client in _clients) {
                 client.Send(message);
             }
@@ -322,7 +329,7 @@ namespace NetEngineServer {
         /// </summary>
         /// <param name="targets"></param>
         /// <param name="message"></param>
-        public void Broadcast(IEnumerable<Client> targets, Message message) {
+        public void Broadcast(IEnumerable<Client> targets, IMessage message) {
             foreach (var client in targets) {
                 client.Send(message);
             }
@@ -437,6 +444,7 @@ namespace NetEngineServer {
         #region Private methods
 
         private void Loop() {
+            // Main while loop, each iteration represents a clock cycle.
             while (_shouldRun) {
                 // Cycle (create a watch to calculate elapsed time)
                 var watch = Stopwatch.StartNew();
@@ -533,7 +541,7 @@ namespace NetEngineServer {
         /// </summary>
         /// <param name="packet"></param>
         private void OnData(Packet packet) {
-            var message = MessagePackSerializer.Deserialize<Message>(packet.Data);
+            var message = MessagePackSerializer.Deserialize<IMessage>(packet.Data);
             message.ConnectionId = packet.ConnectionId;
 
             // Filter with middleware

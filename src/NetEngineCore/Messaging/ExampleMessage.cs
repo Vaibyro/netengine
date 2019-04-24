@@ -7,8 +7,19 @@ using System.Threading.Tasks;
 
 namespace NetEngineCore.Messaging {
     [MessagePackObject]
-    public class ExampleMessage : Message {
+    public class ExampleMessage : IMessage {
         [Key(0)]
         public string Content { get; set; }
+
+        [IgnoreMember]
+        public int ConnectionId { get; set; }
+
+        public ExampleMessage(string content) {
+            Content = content;
+        }
+
+        public ExampleMessage() {
+            
+        }
     }
 }

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using NetEngineCore.Networking;
 
 namespace NetEngineCore.Messaging.Handling {
-    public abstract class MessageHandler<T> : IMessageHandler where T : Message {
+    public abstract class MessageHandler<T> : IMessageHandler where T : IMessage {
         /// <summary>
         /// Get the type of the processed message.
         /// </summary>
@@ -20,6 +20,6 @@ namespace NetEngineCore.Messaging.Handling {
         /// Handle the message.
         /// </summary>
         /// <param name="message"></param>
-        public abstract void Handle(Message message);
+        public abstract void Handle(IMessage message);
     }
 }

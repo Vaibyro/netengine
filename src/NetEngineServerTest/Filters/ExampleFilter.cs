@@ -4,7 +4,7 @@ using NetEngineServer.Filtering;
 
 namespace NetEngineServerTest.Filters {
     public class ExampleFilter : IFilter {
-        public bool Filter(Server server, Message message) {
+        public bool Filter(Server server, IMessage message) {
             return true;
         }
     }
