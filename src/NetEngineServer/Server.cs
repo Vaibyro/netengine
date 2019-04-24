@@ -4,6 +4,7 @@ using NetEngineCore.Networking;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Runtime.Caching;
@@ -147,6 +148,11 @@ namespace NetEngineServer {
         /// </summary>
         public HashSet<IPAddress> IpBlackList { get; } = new HashSet<IPAddress>();
 
+        /// <summary>
+        /// Indicate to the server if the packet reception has to remain ordered.
+        /// </summary>
+        public PacketProcessingMode PacketProcessingMode { get; set; } = PacketProcessingMode.Sequential;
+        
         /// <summary>
         /// Get the dispatcher.
         /// </summary>
@@ -433,35 +439,47 @@ namespace NetEngineServer {
         private void Loop() {
             while (_shouldRun) {
                 // Cycle (create a watch to calculate elapsed time)
-                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var watch = Stopwatch.StartNew();
 
                 // Consume all pending messages
-                // todo: use parallel
-                while (NetworkingServer.GetNextMessage(out Packet packet)) {
-                    // Treat message
-                    switch (packet.PacketType) {
-                        case PacketType.Connection:
-                            OnConnection(packet);
-                            break;
-                        case PacketType.Data:
-                            OnData(packet);
-                            break;
-                        case PacketType.Disconnection:
-                            OnDisconnection(packet);
-                            break;
-                        default:
-                            throw new ArgumentOutOfRangeException();
+                //   Two modes :
+                //      - Sequential (slowest): process all packets in ordered way. Important for transactions.
+                //      - Parallel (fastest): process all packets in a parallel way.
+                if (PacketProcessingMode == PacketProcessingMode.Sequential) {
+                    while (NetworkingServer.GetNextMessage(out Packet packet)) {
+                        DispatchPacket(packet);
                     }
+                } else {
+                    Parallel.For(0, NetworkingServer.ReceiveQueueCount, i => {
+                        NetworkingServer.GetNextMessage(out Packet packet);
+                        DispatchPacket(packet);
+                    });
                 }
 
                 watch.Stop();
-
+                
                 // Get the current real frequency
                 CurrentFrequency = 1000 / (int) MathUtils.Clamp(watch.ElapsedMilliseconds, (1000 / MaxFrequency));
 
                 // Sleep
                 Thread.Sleep((1000 / MaxFrequency) -
                              (int) MathUtils.Clamp(watch.ElapsedMilliseconds, 0, (1000 / MaxFrequency)));
+            }
+        }
+
+        private void DispatchPacket(Packet packet) {
+            switch (packet.PacketType) {
+                case PacketType.Connection:
+                    OnConnection(packet);
+                    break;
+                case PacketType.Data:
+                    OnData(packet);
+                    break;
+                case PacketType.Disconnection:
+                    OnDisconnection(packet);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
         

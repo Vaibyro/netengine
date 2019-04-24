@@ -56,6 +56,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Enums\PacketProcessingMode.cs" />
+    <Compile Include="INetworkSystem.cs" />
     <Compile Include="Messaging\Dispatching\IMessageDispatcher.cs" />
     <Compile Include="Messaging\Handling\IMessageHandler.cs" />
     <Compile Include="Messaging\Handling\MessageHandler.cs" />
@@ -73,7 +75,6 @@
     <Compile Include="Networking\SafeQueue.cs" />
     <Compile Include="Networking\Server.cs" />
     <Compile Include="Networking\Utils.cs" />
-    <Compile Include="INetworkSystem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

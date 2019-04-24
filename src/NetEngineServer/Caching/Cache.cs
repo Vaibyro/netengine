@@ -1,12 +1,13 @@
 ﻿using System;
-using System.Collections;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 
 namespace NetEngineServer.Caching {
-    // Thanks to https://www.codeproject.com/Articles/1033606/Cache-T-A-threadsafe-Simple-Efficient-Generic-In-m
-    
+    // Thanks to Mike Barthold for this implementation of caching service.
+    // https://www.codeproject.com/Articles/1033606/Cache-T-A-threadsafe-Simple-Efficient-Generic-In-m
+
     #region Cache<T> class
 
     /// <inheritdoc />
@@ -16,21 +17,30 @@ namespace NetEngineServer.Caching {
     /// Cache is thread safe and will delete expired entries on its own using System.Threading.Timers (which run on <see cref="T:System.Threading.ThreadPool" /> threads).
     /// </summary>
     public class Cache<TKey, TValue> : IDisposable {
-        #region Constructor and class members
+        #region Private members
+
+        private readonly IDictionary<TKey, TValue> _cache = new ConcurrentDictionary<TKey, TValue>();
+        private readonly IDictionary<TKey, Timer> _timers = new ConcurrentDictionary<TKey, Timer>();
+        private readonly ReaderWriterLockSlim _locker = new ReaderWriterLockSlim();
+        private bool _disposed = false;
+        
+        #endregion
+
+        
+        #region Events
 
         public delegate void CacheEventHandler(object sender, CacheEventArgs e);
+
         public event CacheEventHandler OnRemove = delegate { };
+
+        #endregion
+
         
+        #region Properties
+
         /// <summary>
-        /// Initializes a new instance of the <see cref="Cache{TKey,TValue}"/> class.
+        /// Gets the values of the cache.
         /// </summary>
-        public Cache() {
-        }
-
-        private Dictionary<TKey, TValue> _cache = new Dictionary<TKey, TValue>();
-        private Dictionary<TKey, Timer> _timers = new Dictionary<TKey, Timer>();
-        private ReaderWriterLockSlim _locker = new ReaderWriterLockSlim();
-
         public IEnumerable<TValue> Values {
             get {
                 _locker.EnterReadLock();
@@ -42,13 +52,26 @@ namespace NetEngineServer.Caching {
             }
         }
 
+        /// <summary>
+        /// Gets the number of elements.
+        /// </summary>
+        public int Count {
+            get {
+                if (_disposed) return default;
+                
+                _locker.EnterReadLock();
+                try {
+                    return _cache.Count;
+                } finally {
+                    _locker.ExitReadLock();
+                }
+            }
+        }
+        
         #endregion
 
-        
-        #region IDisposable implementation & Clear
 
-        private bool _disposed = false;
-
+        #region Public methods
         /// <summary>
         /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
         /// </summary>
@@ -96,51 +119,6 @@ namespace NetEngineServer.Caching {
             }
         }
 
-        public bool ContainsKey(TKey key) {
-            _locker.EnterReadLock();
-            try {
-                return _cache.ContainsKey(key);
-            } finally {
-                _locker.ExitReadLock();
-            }
-        }
-        
-        #endregion
-
-        
-        #region CheckTimer
-
-        // Checks whether a specific timer already exists and adds a new one, if not 
-        private void CheckTimer(TKey key, int cacheTimeout, bool restartTimerIfExists) {
-            Timer timer;
-
-            if (_timers.TryGetValue(key, out timer)) {
-                if (restartTimerIfExists) {
-                    timer.Change(
-                        (cacheTimeout == Timeout.Infinite ? Timeout.Infinite : cacheTimeout * 1000),
-                        Timeout.Infinite);
-                }
-            } else
-                _timers.Add(
-                    key,
-                    new Timer(
-                        new TimerCallback(RemoveByTimer),
-                        key,
-                        (cacheTimeout == Timeout.Infinite ? Timeout.Infinite : cacheTimeout * 1000),
-                        Timeout.Infinite));
-        }
-
-        private void RemoveByTimer(object state) {
-            var val = Get((TKey) state);
-            Remove((TKey) state);
-            OnRemove(this, new CacheEventArgs(val));
-        }
-
-        #endregion
-
-        
-        #region AddOrUpdate, Get, Remove, Exists, Clear
-
         /// <summary>
         /// Adds or updates the specified cache-key with the specified cacheObject and applies a specified timeout (in seconds) to this key.
         /// </summary>
@@ -184,19 +162,8 @@ namespace NetEngineServer.Caching {
         /// <param name="key">The cache-key to retrieve.</param>
         /// <returns>The object from the cache or <c>default(T)</c>, if not found.</returns>
         public TValue this[TKey key] => Get(key);
-
-        public int Count {
-            get {
-                _locker.EnterReadLock();
-                try {
-                    return _cache.Count;
-                } finally {
-                    _locker.ExitReadLock();
-                }
-            }
-        }
-
-        /// <summary>
+        
+         /// <summary>
         /// Gets the cache entry with the specified key or return <c>default(T)</c> if the key is not found.
         /// </summary>
         /// <param name="key">The cache-key to retrieve.</param>
@@ -242,7 +209,7 @@ namespace NetEngineServer.Caching {
 
             _locker.EnterWriteLock();
             try {
-                var removers = (from k in _cache.Keys.Cast<TKey>()
+                var removers = (from k in _cache.Keys
                     where keyPattern(k)
                     select k).ToList();
 
@@ -250,6 +217,7 @@ namespace NetEngineServer.Caching {
                     try {
                         _timers[workKey].Dispose();
                     } catch {
+                        // ignored
                     }
 
                     _timers.Remove(workKey);
@@ -274,6 +242,7 @@ namespace NetEngineServer.Caching {
                     try {
                         _timers[key].Dispose();
                     } catch {
+                        // ignored
                     }
 
                     _timers.Remove(key);
@@ -289,7 +258,7 @@ namespace NetEngineServer.Caching {
         /// </summary>
         /// <param name="key">The cache-key to check.</param>
         /// <returns><c>True</c> if the key exists in the cache, otherwise <c>False</c>.</returns>
-        public bool Exists(TKey key) {
+        public bool ContainsKey(TKey key) {
             if (_disposed) return false;
 
             _locker.EnterReadLock();
@@ -299,13 +268,44 @@ namespace NetEngineServer.Caching {
                 _locker.ExitReadLock();
             }
         }
+        
+        #endregion
+
+
+        #region Private methods
+
+        // Checks whether a specific timer already exists and adds a new one, if not 
+        private void CheckTimer(TKey key, int cacheTimeout, bool restartTimerIfExists) {
+            Timer timer;
+
+            if (_timers.TryGetValue(key, out timer)) {
+                if (restartTimerIfExists) {
+                    timer.Change(
+                        (cacheTimeout == Timeout.Infinite ? Timeout.Infinite : cacheTimeout * 1000),
+                        Timeout.Infinite);
+                }
+            } else
+                _timers.Add(
+                    key,
+                    new Timer(
+                        OnTimerRemove,
+                        key,
+                        (cacheTimeout == Timeout.Infinite ? Timeout.Infinite : cacheTimeout * 1000),
+                        Timeout.Infinite));
+        }
+
+        private void OnTimerRemove(object state) {
+            var val = Get((TKey) state);
+            Remove((TKey) state);
+            OnRemove(this, new CacheEventArgs(val));
+        }
 
         #endregion
     }
 
     #endregion
 
-    
+
     #region Other Cache classes (derived)
 
     /// <summary>

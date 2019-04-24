@@ -93,6 +93,11 @@ namespace NetEngineClient {
         /// Gets the dispatcher.
         /// </summary>
         public IMessageDispatcher Dispatcher => _dispatcher;
+        
+        /// <summary>
+        /// Indicate to the client if the packet reception has to remain ordered.
+        /// </summary>
+        public PacketProcessingMode PacketProcessingMode { get; set; } = PacketProcessingMode.Sequential;
 
         #endregion
 
@@ -120,6 +125,7 @@ namespace NetEngineClient {
         /// </summary>
         /// <exception cref="Exception"></exception>
         public void Run() {
+            // Fire event "on client starting..."
             Starting(this, EventArgs.Empty);
 
             // SSL

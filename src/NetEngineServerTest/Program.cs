@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using NetEngineCore;
 using NetEngineCore.Messaging;
 using NetEngineServer;
 using NetEngineServer.Caching;
@@ -57,6 +58,9 @@ namespace NetEngineServerTest {
                 }
             }
 
+            // Config
+            Server.PacketProcessingMode = PacketProcessingMode.Sequential;
+            
             // Run the server
             Server.Run(); 
 

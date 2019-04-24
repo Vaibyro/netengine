@@ -42,11 +42,15 @@ namespace NetEngineClientTest {
                         var m = new ExampleMessage {
                             Content = line
                         };
-                        Client.Send(m);
+
+                        for (int i = 0; i < 20; i++) {
+                            m.Content = "Message n " + i;
+                            Client.Send(m);
+                        }
                         Console.WriteLine($"Message '{line}' sent!");
                         break;
                 }
-            } 
+            }
         }
         
         public static void ClientStarted(object sender, EventArgs args) {
